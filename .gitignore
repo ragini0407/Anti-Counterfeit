@@ -1,0 +1,23 @@
+# Blockchain
+blockchain/node_modules/
+blockchain/cache/
+blockchain/artifacts/
+
+# Backend (teammates)
+backend/node_modules/
+
+# Frontend (teammates)
+frontend/node_modules/
+
+# AI (teammates)
+ai-service/__pycache__/
+ai-service/*.pkl
+ai-service/venv/
+
+# Environment
+.env
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
