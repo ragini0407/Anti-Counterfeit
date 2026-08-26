@@ -6,7 +6,10 @@ const { extractVisualFeatures,compareVisualFeatures } = require("../services/vis
 const {
     generateProductQR
 } = require("../services/qrService");
-
+const {
+    registerProductOnBlockchain,
+    verifyProductOnBlockchain
+} = require("../services/blockchainService");
 const registerProduct = async (req, res) => {
     try {
         const {
@@ -73,7 +76,16 @@ const registerProduct = async (req, res) => {
         }
 
         const productCode = `FPD${String(nextNumber).padStart(4, "0")}`;
-
+    const blockchainResult =
+    await registerProductOnBlockchain({
+        productCode,
+        productName,
+        category,
+        brandName,
+        batchNumber,
+        manufacturingDate,
+        manufacturer: manufacturer._id.toString()
+    });
         // Save image path
        const referenceImage =
     `/uploads/products/${req.file.filename}`;
@@ -100,13 +112,19 @@ const product = await Product.create({
     manufacturerId: manufacturer._id,
     referenceImage,
     visualFeatures,
+    blockchainHash: blockchainResult.productHash,
     qrCode
 });
 
         res.status(201).json({
-            message: "Product registered successfully",
-            product
-        });
+    message: "Product registered successfully",
+    blockchain: {
+        transactionHash: blockchainResult.transactionHash,
+        manufacturerWallet: blockchainResult.manufacturerWallet,
+        productHash: blockchainResult.productHash
+    },
+    product
+});
 
     } catch (error) {
         console.error("Product registration error:", error);
@@ -123,13 +141,35 @@ const verifyProductByQR = async (req, res) => {
 
         const product = await Product.findOne({ productCode });
 
-        if (!product) {
-            return res.status(404).json({
-                verified: false,
-                status: "FAKE",
-                message: "Product is not registered"
-            });
+       if (!product) {
+    return res.status(404).json({
+        verified: false,
+        status: "FAKE",
+        message: "Product is not registered"
+       });
+    }
+    const blockchainResult =
+    await verifyProductOnBlockchain(
+        product.productCode,
+        product.blockchainHash
+    );
+    if (
+    !blockchainResult.exists ||
+    !blockchainResult.hashMatches ||
+    blockchainResult.isFlagged
+) {
+    return res.status(200).json({
+        verified: false,
+        status: "FAKE",
+        message: "Blockchain verification failed",
+        product: {
+            productCode: product.productCode,
+            productName: product.productName,
+            category: product.category,
+            brandName: product.brandName
         }
+    });
+}  
 
         // Count this QR scan
         product.totalScans += 1;
@@ -175,6 +215,7 @@ const verifyProductImage = async (req, res) => {
         // Remember the uploaded file so we can delete it later
         uploadedFilePath = req.file.path;
 
+        // Find product in MongoDB
         const product = await Product.findOne({ productCode });
 
         if (!product) {
@@ -185,6 +226,33 @@ const verifyProductImage = async (req, res) => {
             });
         }
 
+        // Check blockchain record
+        const blockchainResult =
+            await verifyProductOnBlockchain(
+                product.productCode,
+                product.blockchainHash
+            );
+
+        // Blockchain must contain the product,
+        // hash must match, and product must not be flagged
+        if (
+            !blockchainResult.exists ||
+            !blockchainResult.hashMatches ||
+            blockchainResult.isFlagged
+        ) {
+            return res.status(200).json({
+                verified: false,
+                status: "FAKE",
+                message: "Blockchain verification failed",
+                product: {
+                    productCode: product.productCode,
+                    productName: product.productName,
+                    brandName: product.brandName
+                }
+            });
+        }
+
+        // Check reference visual features
         if (
             !product.visualFeatures ||
             product.visualFeatures.length === 0
@@ -199,7 +267,7 @@ const verifyProductImage = async (req, res) => {
         const testFeatures =
             await extractVisualFeatures(uploadedFilePath);
 
-        // Compare with genuine features
+        // Compare with genuine reference features
         const similarity = compareVisualFeatures(
             product.visualFeatures,
             testFeatures
@@ -219,6 +287,7 @@ const verifyProductImage = async (req, res) => {
             verified: status === "GENUINE",
             status,
             similarity,
+            blockchainVerified: true,
             product: {
                 productCode: product.productCode,
                 productName: product.productName,

@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+*.env
+
+# Generated caches
+.cache/
+backend/.cache/
+
+# Uploaded files
+uploads/
+backend/uploads/
+
+# Test files / images
+test-images/
+backend/test-images/
+testVision.js
+backend/testVision.js
+
+# Hardhat generated files
+blockchain/artifacts/
+blockchain/cache/
