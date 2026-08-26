@@ -48,6 +48,11 @@ const productSchema = new mongoose.Schema(
             type: String,
             default: ""
         },
+        
+        qrCode: {
+          type: String,
+          default: ""
+        },
 
         visualFeatures: {
             type: [Number],
