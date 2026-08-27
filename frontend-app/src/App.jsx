@@ -6,7 +6,9 @@ import Signup from "./Signup";
 import AdminDashboard from "./AdminDashboard";
 import ManufacturerDashboard from "./ManufacturerDashboard";
 import ConsumerDashboard from "./ConsumerDashboard";
+
 import Scanner from "./Scanner";
+import ConsumerScanner from "./ConsumerScanner";
 
 import "./App.css";
 
@@ -62,18 +64,32 @@ function App() {
     setPage("consumer");
   };
 
-  // =========================
-  // MANUFACTURER / CONSUMER → SCANNER
-  // =========================
-  const openScanner = () => {
-    setPage("scanner");
+  // ==================================================
+  // MANUFACTURER → MANUFACTURER SCANNER
+  // ==================================================
+  const openManufacturerScanner = () => {
+    setPage("manufacturer-scanner");
   };
 
-  // =========================
-  // SCANNER → MANUFACTURER
-  // =========================
-  const closeScanner = () => {
+  // ==================================================
+  // MANUFACTURER SCANNER → MANUFACTURER DASHBOARD
+  // ==================================================
+  const closeManufacturerScanner = () => {
     setPage("manufacturer");
+  };
+
+  // ==================================================
+  // CONSUMER → CONSUMER SCANNER
+  // ==================================================
+  const openConsumerScanner = () => {
+    setPage("consumer-scanner");
+  };
+
+  // ==================================================
+  // CONSUMER SCANNER → CONSUMER DASHBOARD
+  // ==================================================
+  const closeConsumerScanner = () => {
+    setPage("consumer");
   };
 
   // =========================
@@ -134,37 +150,48 @@ function App() {
     );
   }
 
-  // =========================
+  // ==================================================
   // MANUFACTURER DASHBOARD
-  // =========================
+  // ==================================================
   if (page === "manufacturer") {
     return (
       <ManufacturerDashboard
         onLogout={openHome}
-        onScanner={openScanner}
+        onScanner={openManufacturerScanner}
       />
     );
   }
 
-  // =========================
+  // ==================================================
   // CONSUMER DASHBOARD
-  // =========================
+  // ==================================================
   if (page === "consumer") {
     return (
       <ConsumerDashboard
         onLogout={openHome}
-        onScanner={openScanner}
+        onScanner={openConsumerScanner}
       />
     );
   }
 
-  // =========================
-  // QR SCANNER
-  // =========================
-  if (page === "scanner") {
+  // ==================================================
+  // MANUFACTURER QR SCANNER
+  // ==================================================
+  if (page === "manufacturer-scanner") {
     return (
       <Scanner
-        onBack={closeScanner}
+        onBack={closeManufacturerScanner}
+      />
+    );
+  }
+
+  // ==================================================
+  // CONSUMER QR SCANNER
+  // ==================================================
+  if (page === "consumer-scanner") {
+    return (
+      <ConsumerScanner
+        onBack={closeConsumerScanner}
       />
     );
   }

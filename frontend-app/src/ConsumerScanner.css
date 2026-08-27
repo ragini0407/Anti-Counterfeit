@@ -1,8 +1,8 @@
 /* =========================================================
-   QR PRODUCT SCANNER
+   CONSUMER PRODUCT SCANNER
 ========================================================= */
 
-.scanner-page {
+.consumer-scanner-page {
   min-height: 100vh;
   width: 100%;
   background: #f5f8ff;
@@ -12,18 +12,17 @@
   color: #071b52;
 }
 
-
 /* =========================================================
    HEADER
 ========================================================= */
 
-.scanner-header {
+.consumer-scanner-header {
   width: 100%;
   max-width: 1100px;
   margin: 0 auto 25px;
 }
 
-.scanner-back-button {
+.consumer-back-button {
   border: none;
   background: transparent;
   color: #1265e8;
@@ -34,285 +33,217 @@
   transition: 0.2s ease;
 }
 
-.scanner-back-button:hover {
+.consumer-back-button:hover {
   color: #0848b8;
   transform: translateX(-3px);
 }
 
-.scanner-title {
+.consumer-scanner-title {
   margin-top: 15px;
 }
 
-.scanner-title h1 {
+.consumer-scanner-title h1 {
   margin: 0;
   font-size: 32px;
   font-weight: 700;
   color: #071b52;
 }
 
-.scanner-title p {
+.consumer-scanner-title p {
   margin: 8px 0 0;
   color: #64769a;
   font-size: 16px;
 }
 
-
 /* =========================================================
    MAIN CARD
 ========================================================= */
 
-.scanner-card {
+.consumer-scanner-card {
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
-
   background: #ffffff;
-
   border: 1px solid #dce7f7;
   border-radius: 20px;
-
   padding: 40px;
-
   text-align: center;
-
   box-sizing: border-box;
-
   box-shadow: 0 10px 30px rgba(25, 80, 160, 0.08);
 }
-
 
 /* =========================================================
    ICON
 ========================================================= */
 
-.scanner-icon {
+.consumer-scanner-icon {
   width: 65px;
   height: 65px;
-
   margin: 0 auto 15px;
-
   border-radius: 18px;
-
   background: #e8f1ff;
   color: #1265e8;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   font-size: 38px;
   font-weight: bold;
 }
 
-.scanner-card h2 {
+.consumer-scanner-card h2 {
   margin: 5px 0;
   font-size: 26px;
   font-weight: 700;
   color: #071b52;
 }
 
-.scanner-description {
+.consumer-scanner-description {
   color: #66789b;
   margin: 8px 0 30px;
   font-size: 15px;
 }
 
-
 /* =========================================================
    CAMERA AREA
 ========================================================= */
 
-.camera-box {
+.consumer-camera-box {
   width: 100%;
   min-height: 420px;
-
   border-radius: 18px;
-
   background: #eef5ff;
-
   border: 2px dashed #c9d9ef;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   overflow: hidden;
-
   box-sizing: border-box;
 }
-
 
 /* =========================================================
    CAMERA PLACEHOLDER
 ========================================================= */
 
-.camera-placeholder {
+.consumer-camera-placeholder {
   width: 100%;
   text-align: center;
 }
 
-.camera-symbol {
+.consumer-camera-symbol {
   font-size: 70px;
   margin-bottom: 15px;
 }
 
-.camera-placeholder h3 {
+.consumer-camera-placeholder h3 {
   margin: 10px 0;
-
   font-size: 22px;
-  font-weight: 700;
-
   color: #071b52;
 }
 
-.camera-placeholder p {
+.consumer-camera-placeholder p {
   color: #64769a;
-
   margin: 0 0 25px;
-
   font-size: 15px;
 }
 
-
 /* =========================================================
-   START SCANNER BUTTON
+   START BUTTON
 ========================================================= */
 
-.start-scan-button {
+.consumer-start-button {
   border: none;
-
   background: #1265e8;
   color: #ffffff;
-
   padding: 14px 28px;
-
   border-radius: 10px;
-
   font-size: 16px;
   font-weight: 600;
-
   cursor: pointer;
-
   box-shadow: 0 8px 20px rgba(18, 101, 232, 0.25);
-
   transition: all 0.2s ease;
 }
 
-.start-scan-button:hover {
+.consumer-start-button:hover {
   background: #0954cc;
   transform: translateY(-2px);
 }
-
-.start-scan-button:active {
-  transform: translateY(0);
-}
-
 
 /* =========================================================
    ACTIVE SCANNER
 ========================================================= */
 
-.active-scanner {
+.consumer-active-scanner {
   width: 100%;
-
   display: flex;
   flex-direction: column;
-
   align-items: center;
   justify-content: center;
 }
 
-
-/* =========================================================
-   SCANNER FRAME
-========================================================= */
-
-.scanner-frame {
+.consumer-scanner-frame {
   position: relative;
-
   width: 320px;
   height: 320px;
-
   background: #17233d;
-
   border-radius: 15px;
-
   overflow: hidden;
-
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
 }
-
 
 /* =========================================================
    SCANNER CORNERS
 ========================================================= */
 
-.corner {
+.consumer-corner {
   position: absolute;
-
   width: 45px;
   height: 45px;
-
   border-color: #21e879;
   border-style: solid;
-
   z-index: 2;
 }
 
-.top-left {
+.consumer-top-left {
   top: 20px;
   left: 20px;
-
   border-width: 5px 0 0 5px;
 }
 
-.top-right {
+.consumer-top-right {
   top: 20px;
   right: 20px;
-
   border-width: 5px 5px 0 0;
 }
 
-.bottom-left {
+.consumer-bottom-left {
   bottom: 20px;
   left: 20px;
-
   border-width: 0 0 5px 5px;
 }
 
-.bottom-right {
+.consumer-bottom-right {
   bottom: 20px;
   right: 20px;
-
   border-width: 0 5px 5px 0;
 }
-
 
 /* =========================================================
    SCAN LINE
 ========================================================= */
 
-.scan-line {
+.consumer-scan-line {
   position: absolute;
-
   left: 30px;
   right: 30px;
-
   top: 50%;
-
   height: 3px;
-
   background: #21e879;
-
   box-shadow: 0 0 10px #21e879;
-
   z-index: 3;
-
-  animation: scannerLine 2s infinite ease-in-out;
+  animation: consumerScannerLine 2s infinite ease-in-out;
 }
 
-@keyframes scannerLine {
-
+@keyframes consumerScannerLine {
   0% {
     top: 25%;
   }
@@ -324,214 +255,298 @@
   100% {
     top: 25%;
   }
-
 }
 
-
-/* =========================================================
-   ACTIVE SCANNER TEXT
-========================================================= */
-
-.active-scanner p {
+.consumer-active-scanner p {
   color: #64769a;
-
   margin: 20px 0;
-
   font-size: 15px;
 }
 
-
 /* =========================================================
-   DEMO SCAN BUTTON
+   DEMO BUTTON
 ========================================================= */
 
-.scan-demo-button {
+.consumer-demo-button {
   border: none;
-
   background: #1265e8;
-  color: #ffffff;
-
-  padding: 12px 25px;
-
+  color: white;
+  padding: 12px 24px;
   border-radius: 9px;
-
-  font-size: 14px;
   font-weight: 600;
-
   cursor: pointer;
-
-  margin-bottom: 12px;
-
-  transition: all 0.2s ease;
+  margin-bottom: 10px;
 }
 
-.scan-demo-button:hover {
+.consumer-demo-button:hover {
   background: #0954cc;
-  transform: translateY(-1px);
 }
-
 
 /* =========================================================
    STOP BUTTON
 ========================================================= */
 
-.stop-scan-button {
+.consumer-stop-button {
   border: 1px solid #e33c3c;
-
-  background: #ffffff;
-
+  background: white;
   color: #e33c3c;
-
   padding: 11px 25px;
-
   border-radius: 9px;
-
   font-size: 14px;
   font-weight: 600;
-
   cursor: pointer;
-
-  transition: all 0.2s ease;
 }
 
-.stop-scan-button:hover {
+.consumer-stop-button:hover {
   background: #fff0f0;
-
-  transform: translateY(-1px);
 }
-
 
 /* =========================================================
    RESULT
 ========================================================= */
 
-.scanner-result {
+.consumer-result {
   width: 100%;
-
-  padding: 25px;
-
-  background: #effcf4;
-
-  border: 1px solid #bde9cd;
-
-  border-radius: 12px;
-
+  max-width: 600px;
+  margin: auto;
+  padding: 30px;
   box-sizing: border-box;
 }
 
-.scanner-result h3 {
+.consumer-result-icon {
+  width: 65px;
+  height: 65px;
+  margin: 0 auto 15px;
+  border-radius: 50%;
+  background: #dcf8e8;
+  color: #0ca04d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 35px;
+  font-weight: bold;
+}
+
+.consumer-result h3 {
   color: #119447;
-
-  margin: 0 0 15px;
-
-  font-size: 20px;
+  font-size: 24px;
+  margin: 10px 0;
 }
 
-.result-value {
-  background: #ffffff;
+.consumer-result > p {
+  color: #64769a;
+  font-size: 15px;
+  line-height: 1.6;
+}
 
+/* =========================================================
+   RESULT DETAILS
+========================================================= */
+
+.consumer-result-details {
+  background: white;
   border: 1px solid #d5e8db;
-
-  border-radius: 8px;
-
-  padding: 12px;
-
-  margin: 15px 0;
-
-  word-break: break-word;
-
-  color: #263b5f;
-
-  font-size: 14px;
+  border-radius: 10px;
+  padding: 15px;
+  margin: 20px 0;
+  text-align: left;
 }
 
+.consumer-result-details div {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf2ef;
+}
+
+.consumer-result-details div:last-child {
+  border-bottom: none;
+}
+
+.consumer-result-details strong {
+  color: #263b5f;
+}
+
+.consumer-result-details span {
+  color: #516586;
+}
+
+.consumer-result-details .verified {
+  color: #0ca04d;
+  font-weight: 700;
+}
 
 /* =========================================================
    SCAN AGAIN
 ========================================================= */
 
-.scan-again-button {
+.consumer-scan-again-button {
   border: none;
-
   background: #1265e8;
-
-  color: #ffffff;
-
+  color: white;
   padding: 12px 25px;
-
   border-radius: 9px;
-
   font-size: 14px;
-
   font-weight: 600;
-
   cursor: pointer;
-
-  transition: all 0.2s ease;
 }
 
-.scan-again-button:hover {
+.consumer-scan-again-button:hover {
   background: #0954cc;
-
-  transform: translateY(-1px);
 }
 
+/* =========================================================
+   FEATURES
+========================================================= */
+
+.consumer-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  margin-top: 25px;
+  padding: 25px;
+  background: #f8faff;
+  border: 1px solid #dce7f7;
+  border-radius: 15px;
+  text-align: left;
+}
+
+.consumer-feature-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  background: #e8f1ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 25px;
+  flex-shrink: 0;
+}
+
+.consumer-feature-content {
+  flex: 1;
+}
+
+.consumer-feature-content h3 {
+  margin: 0 0 7px;
+  color: #071b52;
+}
+
+.consumer-feature-content p {
+  margin: 0 0 15px;
+  color: #64769a;
+  font-size: 14px;
+}
+
+/* =========================================================
+   UPLOAD
+========================================================= */
+
+.consumer-upload-button {
+  display: inline-block;
+  background: #1265e8;
+  color: white;
+  padding: 11px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.consumer-upload-button:hover {
+  background: #0954cc;
+}
+
+.consumer-upload-button input {
+  display: none;
+}
+
+/* =========================================================
+   IMAGE PREVIEW
+========================================================= */
+
+.consumer-image-preview {
+  margin-top: 15px;
+}
+
+.consumer-image-preview img {
+  max-width: 250px;
+  max-height: 200px;
+  border-radius: 10px;
+  border: 1px solid #dce7f7;
+}
+
+.consumer-image-preview p {
+  margin-top: 8px;
+  color: #0ca04d;
+}
+
+/* =========================================================
+   LOCATION
+========================================================= */
+
+.consumer-location-button {
+  border: none;
+  background: #1265e8;
+  color: white;
+  padding: 11px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.consumer-location-button:hover {
+  background: #0954cc;
+}
+
+.consumer-location-result {
+  margin-top: 12px;
+  padding: 10px;
+  background: white;
+  border: 1px solid #dce7f7;
+  border-radius: 8px;
+  color: #263b5f;
+  font-size: 13px;
+}
 
 /* =========================================================
    INFORMATION
 ========================================================= */
 
-.scanner-info {
+.consumer-scanner-info {
   display: flex;
-
   justify-content: center;
   align-items: center;
-
   gap: 35px;
-
   margin-top: 35px;
-
   padding-top: 25px;
-
   border-top: 1px solid #e2e9f4;
 }
 
-.info-item {
+.consumer-info-item {
   display: flex;
-
   align-items: center;
-
   gap: 8px;
-
   color: #516586;
-
   font-size: 14px;
 }
 
-.info-item span {
+.consumer-info-item span {
   width: 23px;
   height: 23px;
-
   border-radius: 50%;
-
   background: #dcf8e8;
-
   color: #0ca04d;
-
   display: flex;
-
   align-items: center;
   justify-content: center;
-
   font-weight: bold;
-
-  flex-shrink: 0;
 }
 
-.info-item p {
+.consumer-info-item p {
   margin: 0;
 }
-
 
 /* =========================================================
    TABLET
@@ -539,20 +554,19 @@
 
 @media (max-width: 900px) {
 
-  .scanner-page {
+  .consumer-scanner-page {
     padding: 25px;
   }
 
-  .scanner-card {
+  .consumer-scanner-card {
     padding: 30px;
   }
 
-  .scanner-info {
+  .consumer-scanner-info {
     gap: 20px;
   }
 
 }
-
 
 /* =========================================================
    MOBILE
@@ -560,52 +574,50 @@
 
 @media (max-width: 700px) {
 
-  .scanner-page {
+  .consumer-scanner-page {
     padding: 15px;
   }
 
-  .scanner-title h1 {
+  .consumer-scanner-title h1 {
     font-size: 26px;
   }
 
-  .scanner-title p {
+  .consumer-scanner-title p {
     font-size: 14px;
   }
 
-  .scanner-card {
+  .consumer-scanner-card {
     padding: 25px 15px;
-
     border-radius: 15px;
   }
 
-  .scanner-card h2 {
+  .consumer-scanner-card h2 {
     font-size: 22px;
   }
 
-  .camera-box {
+  .consumer-camera-box {
     min-height: 350px;
   }
 
-  .scanner-frame {
+  .consumer-scanner-frame {
     width: 270px;
     height: 270px;
   }
 
-  .scanner-info {
+  .consumer-feature {
     flex-direction: column;
+  }
 
+  .consumer-scanner-info {
+    flex-direction: column;
     align-items: flex-start;
-
     gap: 12px;
-
     width: fit-content;
-
     margin-left: auto;
     margin-right: auto;
   }
 
 }
-
 
 /* =========================================================
    SMALL MOBILE
@@ -613,26 +625,21 @@
 
 @media (max-width: 400px) {
 
-  .scanner-page {
+  .consumer-scanner-page {
     padding: 10px;
   }
 
-  .scanner-card {
+  .consumer-scanner-card {
     padding: 20px 10px;
   }
 
-  .scanner-frame {
+  .consumer-scanner-frame {
     width: 240px;
     height: 240px;
   }
 
-  .camera-symbol {
+  .consumer-camera-symbol {
     font-size: 55px;
   }
 
-  .start-scan-button {
-    padding: 12px 22px;
-
-    font-size: 14px;
-  }
 }
