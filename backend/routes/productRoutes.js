@@ -18,7 +18,7 @@ router.post(
     registerProduct
 );
 
-router.get(
+router.post(
     "/verify/:productCode",
     verifyProductByQR
 );

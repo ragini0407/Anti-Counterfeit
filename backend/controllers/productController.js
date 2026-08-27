@@ -1,5 +1,6 @@
 const Product = require("../models/Product");
 const Manufacturer = require("../models/Manufacturer");
+const Verification = require("../models/Verification");
 const path = require("path");
 const fs = require("fs/promises");
 const { extractVisualFeatures,compareVisualFeatures } = require("../services/visualFeatureService");
@@ -138,7 +139,13 @@ const product = await Product.create({
 const verifyProductByQR = async (req, res) => {
     try {
         const { productCode } = req.params;
-
+        const { latitude, longitude } = req.body;
+        if (latitude === undefined || longitude === undefined) {
+    return res.status(400).json({
+        verified: false,
+        message: "Location is required"
+    });
+}
         const product = await Product.findOne({ productCode });
 
        if (!product) {
@@ -174,7 +181,16 @@ const verifyProductByQR = async (req, res) => {
         // Count this QR scan
         product.totalScans += 1;
         await product.save();
-
+        await Verification.create({
+    productId: product._id,
+    productCode: product.productCode,
+    verificationType: "QR",
+    status: product.verificationStatus,
+    location: {
+        latitude,
+        longitude
+    }
+});
         return res.status(200).json({
             verified: true,
             status: product.verificationStatus,
@@ -204,7 +220,13 @@ const verifyProductImage = async (req, res) => {
 
     try {
         const { productCode } = req.params;
-
+        const { latitude, longitude } = req.body;
+        if (latitude === undefined || longitude === undefined) {
+    return res.status(400).json({
+        verified: false,
+        message: "Location is required"
+    });
+}
         if (!req.file) {
             return res.status(400).json({
                 verified: false,
@@ -282,7 +304,17 @@ const verifyProductImage = async (req, res) => {
         } else {
             status = "FAKE";
         }
-
+        await Verification.create({
+    productId: product._id,
+    productCode: product.productCode,
+    verificationType: "IMAGE",
+    status,
+    similarity,
+    location: {
+        latitude,
+        longitude
+    }
+});
         return res.status(200).json({
             verified: status === "GENUINE",
             status,
