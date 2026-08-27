@@ -1,0 +1,49 @@
+@import "./Login.css";
+
+
+.signup-card {
+  max-width: 660px;
+}
+
+
+/* ================= TERMS ================= */
+
+.terms {
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 8px;
+
+  margin: 5px 0 20px;
+
+  color: #40516f;
+
+  font-size: 13px;
+
+  cursor: pointer;
+
+  line-height: 1.4;
+}
+
+.terms input {
+  width: 17px;
+
+  height: 17px;
+
+  margin: 0;
+
+  cursor: pointer;
+
+  accent-color: #1670ef;
+}
+
+.terms a {
+  color: #006cff;
+
+  text-decoration: none;
+}
+
+.terms a:hover {
+  text-decoration: underline;
+}

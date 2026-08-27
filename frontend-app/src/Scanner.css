@@ -1,0 +1,26 @@
+/* =========================================================
+   DEMO SCAN BUTTON
+========================================================= */
+
+.scan-demo-button {
+  border: none;
+  background: #1265e8;
+  color: #ffffff;
+
+  padding: 12px 24px;
+  margin-bottom: 12px;
+
+  border-radius: 9px;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition: all 0.2s ease;
+}
+
+.scan-demo-button:hover {
+  background: #0954cc;
+  transform: translateY(-1px);
+}
