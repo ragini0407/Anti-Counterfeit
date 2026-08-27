@@ -24,3 +24,10 @@ Thumbs.db
 venv/
 __pycache__/
 *.pyc
+
+
+# AI dataset
+ai/dataset/
+
+# Trained AI models
+ai/models/saved_models/*.h5
