@@ -353,8 +353,40 @@ const verifyProductImage = async (req, res) => {
         }
     }
 };
+const getMyProducts = async (req, res) => {
+    try {
+        // Find manufacturer linked to logged-in user
+        const manufacturer = await Manufacturer.findOne({
+            userId: req.user.userId
+        });
+
+        if (!manufacturer) {
+            return res.status(404).json({
+                message: "Manufacturer profile not found"
+            });
+        }
+
+        // Get products belonging to this manufacturer
+        const products = await Product.find({
+            manufacturerId: manufacturer._id
+        }).sort({ createdAt: -1 });
+
+        res.status(200).json({
+            count: products.length,
+            products
+        });
+
+    } catch (error) {
+        console.error("Get my products error:", error);
+
+        res.status(500).json({
+            message: "Server error while fetching products"
+        });
+    }
+};
 module.exports = {
     registerProduct,
     verifyProductByQR,
-    verifyProductImage
+    verifyProductImage,
+    getMyProducts
 };

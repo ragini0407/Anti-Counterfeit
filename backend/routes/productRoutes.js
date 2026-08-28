@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { registerProduct,verifyProductByQR,verifyProductImage } = require("../controllers/productController");
+const { registerProduct,verifyProductByQR,verifyProductImage,getMyProducts } = require("../controllers/productController");
 
 const {
     protect,
@@ -27,6 +27,13 @@ router.post(
     "/verify-image/:productCode",
     upload.single("productImage"),
     verifyProductImage
+);
+
+router.get(
+    "/my-products",
+    protect,
+    authorizeRoles("MANUFACTURER"),
+    getMyProducts
 );
 
 module.exports = router;
