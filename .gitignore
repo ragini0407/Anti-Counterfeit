@@ -31,3 +31,5 @@ ai/dataset/
 
 # Trained AI models
 ai/models/saved_models/*.h5
+
+!ai/models/saved_models/cnn_fake_detector.h5
