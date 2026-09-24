@@ -1,7 +1,14 @@
 const express = require("express");
 const router = express.Router();
 
-const { registerProduct,verifyProductByQR,verifyProductImage,getMyProducts } = require("../controllers/productController");
+const {
+    registerProduct,
+    verifyProductByQR,
+    verifyProductImage,
+    getMyProducts,
+    deleteProduct,
+    getConsumerStats
+} = require("../controllers/productController");
 
 const {
     protect,
@@ -35,5 +42,16 @@ router.get(
     authorizeRoles("MANUFACTURER"),
     getMyProducts
 );
+router.get(
+    "/consumer-stats",
+    getConsumerStats
+)
+router.delete(
+    "/:productCode",
+    protect,
+    authorizeRoles("MANUFACTURER"),
+    deleteProduct
+);
+;
 
 module.exports = router;

@@ -2,15 +2,10 @@ const mongoose = require("mongoose");
 
 const verificationSchema = new mongoose.Schema(
     {
-        productId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Product",
-            required: true
-        },
-
         productCode: {
             type: String,
-            required: true
+            required: true,
+            trim: true
         },
 
         verificationType: {
@@ -20,12 +15,25 @@ const verificationSchema = new mongoose.Schema(
         },
 
         status: {
-            type: String,
-            enum: ["GENUINE", "SUSPICIOUS", "FAKE"],
-            required: true
-        },
+    type: String,
+    enum: [
+        "GENUINE",
+        "SUSPICIOUS",
+        "FAKE",
+        "NOT_REGISTERED",
+        "DEACTIVATED",
+        "FLAGGED",
+        "INVALID_QR"
+    ],
+    required: true
+},
 
         similarity: {
+            type: Number,
+            default: null
+        },
+
+        aiConfidence: {
             type: Number,
             default: null
         },

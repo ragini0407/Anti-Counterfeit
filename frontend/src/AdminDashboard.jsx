@@ -1590,26 +1590,19 @@ function AdminDashboard({ onLogout }) {
   const renderProducts = () => {
 
     const genuineProducts =
-      products.filter(
-        (product) =>
-          product.verificationStatus ===
-          "GENUINE"
-      ).length;
+  products.filter(
+    (product) => product.status === "GENUINE"
+  ).length;
 
-    const suspiciousProducts =
-      products.filter(
-        (product) =>
-          product.verificationStatus ===
-          "SUSPICIOUS"
-      ).length;
+const suspiciousProducts =
+  products.filter(
+    (product) => product.status === "SUSPICIOUS"
+  ).length;
 
-    const fakeProducts =
-      products.filter(
-        (product) =>
-          product.verificationStatus ===
-          "FAKE"
-      ).length;
-
+const deactivatedProducts =
+  products.filter(
+    (product) => product.status === "DEACTIVATED"
+  ).length;
 
     return (
       <div className="inner-page">
@@ -1664,12 +1657,12 @@ function AdminDashboard({ onLogout }) {
           />
 
           <MonitorCard
-            title="Fake Products"
-            value={fakeProducts}
-            change="Flagged"
-            icon="alert"
-            danger
-          />
+  title="Deactivated Products"
+  value={deactivatedProducts}
+  change="Blockchain status"
+  icon="alert"
+  danger
+/>
 
         </div>
 
@@ -1685,7 +1678,7 @@ function AdminDashboard({ onLogout }) {
               </h2>
 
               <p className="card-subtitle">
-                Products currently stored in MongoDB
+                Products registered on the Blockchain
               </p>
 
             </div>
@@ -1750,11 +1743,9 @@ function AdminDashboard({ onLogout }) {
 
                   {products.map(
                     (product) => (
-
+              
                       <tr
-                        key={
-                          product._id
-                        }
+                        key={product.productCode}
                       >
 
                         <td>
@@ -1801,17 +1792,18 @@ function AdminDashboard({ onLogout }) {
                         <td>
 
                           <span
-                            className={
-                              product.verificationStatus ===
-                              "GENUINE"
-                                ? "green-text"
-                                : "danger-text"
-                            }
-                          >
-                            {statusLabel(
-                              product.verificationStatus
-                            )}
-                          </span>
+  className={
+    product.status === "GENUINE"
+      ? "green-text"
+      : product.status === "SUSPICIOUS"
+      ? "suspicious-text"
+      : product.status === "DEACTIVATED"
+      ? "danger-text"
+      : "unknown-text"
+  }
+>
+  {statusLabel(product.status)}
+</span>
 
                         </td>
 

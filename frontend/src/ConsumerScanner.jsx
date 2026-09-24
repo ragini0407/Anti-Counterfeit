@@ -3,12 +3,14 @@ import { Html5Qrcode } from "html5-qrcode";
 import "./ConsumerScanner.css";
 
 function ConsumerScanner({ onBack }) {
-  const [scanning, setScanning] = useState(false);
-  const [result, setResult] = useState("");
-  const [image, setImage] = useState(null);
-  const [location, setLocation] = useState("");
-  const [verificationResult, setVerificationResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+const [scanning, setScanning] = useState(false);
+const [result, setResult] = useState("");
+const [image, setImage] = useState(null);
+const [imageFile, setImageFile] = useState(null);
+const [location, setLocation] = useState("");
+const [productCode, setProductCode] = useState("");
+const [verificationResult, setVerificationResult] = useState(null);
+const [loading, setLoading] = useState(false);
 
   const scannerRef = useRef(null);
 
@@ -241,6 +243,8 @@ try {
 
 console.log("Extracted product code:", productCode);
 
+setProductCode(productCode);
+
 setResult(`Product code detected: ${productCode}`);
 
 await verifyProduct(productCode);
@@ -276,12 +280,172 @@ await verifyProduct(productCode);
   // IMAGE UPLOAD
   // =========================
   const handleImageUpload = (e) => {
-    const file = e.target.files[0];
+  const file = e.target.files[0];
 
-    if (file) {
-      setImage(URL.createObjectURL(file));
+  if (!file) {
+    return;
+  }
+
+  setImageFile(file);
+  setImage(URL.createObjectURL(file));
+
+  console.log("Image selected:", file.name);
+};
+const verifyUploadedImage = async () => {
+  if (!productCode) {
+    setResult("Please scan the product QR code first.");
+    return;
+  }
+
+  if (!imageFile) {
+    setResult("Please upload a product image first.");
+    return;
+  }
+
+  setLoading(true);
+  setResult("");
+  setVerificationResult(null);
+
+  try {
+    let latitude = null;
+    let longitude = null;
+
+    try {
+      const position = await getCurrentLocation();
+
+      latitude = position.latitude;
+      longitude = position.longitude;
+
+      setLocation(
+        `Latitude: ${latitude.toFixed(5)}, Longitude: ${longitude.toFixed(5)}`
+      );
+    } catch (locationError) {
+      console.log("Location unavailable:", locationError);
     }
-  };
+
+    const formData = new FormData();
+
+    formData.append("productImage", imageFile);
+
+    if (latitude !== null) {
+      formData.append("latitude", latitude);
+    }
+
+    if (longitude !== null) {
+      formData.append("longitude", longitude);
+    }
+
+    console.log("Sending image verification:", {
+      productCode,
+      imageName: imageFile.name,
+      latitude,
+      longitude
+    });
+
+    const response = await fetch(
+      `http://localhost:5000/api/products/verify-image/${encodeURIComponent(
+        productCode
+      )}`,
+      {
+        method: "POST",
+        body: formData
+      }
+    );
+
+    const data = await response.json();
+
+    console.log("Image verification response:", data);
+
+    if (!response.ok) {
+      setVerificationResult({
+        status: data.status || "VERIFICATION FAILED",
+        message:
+          data.message || "Unable to verify this product image.",
+        product:
+          data.product?.productName ||
+          productCode,
+        manufacturer:
+          data.product?.brandName ||
+          "Unknown",
+        verifiedDate: new Date().toLocaleDateString(),
+        aiPrediction: data.aiPrediction,
+        aiConfidence: data.aiConfidence,
+        blockchainVerified:
+          data.blockchainVerified
+      });
+
+      setResult(
+        data.message ||
+          "Product image verification failed."
+      );
+
+      return;
+    }
+
+    setVerificationResult({
+      status:
+        data.status === "GENUINE"
+          ? "Genuine Product"
+          : data.status || "Verification Result",
+
+      message:
+        data.message ||
+        "Product image verification completed.",
+
+      product:
+        data.product?.productName ||
+        productCode,
+
+      manufacturer:
+        data.product?.brandName ||
+        "Unknown",
+
+      verifiedDate:
+        new Date().toLocaleDateString(),
+
+      productCode:
+        data.product?.productCode ||
+        productCode,
+
+      aiPrediction:
+        data.aiPrediction,
+
+      aiConfidence:
+        data.aiConfidence,
+
+      blockchainVerified:
+        data.blockchainVerified
+    });
+
+    setResult(
+      data.message ||
+        `Image verification completed: ${data.status}`
+    );
+
+  } catch (error) {
+    console.error(
+      "Image verification error:",
+      error
+    );
+
+    setVerificationResult({
+      status: "VERIFICATION FAILED",
+      message:
+        "Unable to verify the product image. Please make sure the backend and AI service are running.",
+      product: productCode,
+      manufacturer: "Unknown",
+      verifiedDate:
+        new Date().toLocaleDateString()
+    });
+
+    setResult(
+      "Product image verification failed."
+    );
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   // =========================
   // SHARE LOCATION
@@ -549,19 +713,36 @@ await verifyProduct(productCode);
             </label>
 
             {image && (
-              <div className="consumer-image-preview">
+  <div className="consumer-image-preview">
 
-                <img
-                  src={image}
-                  alt="Product preview"
-                />
+    <img
+      src={image}
+      alt="Product preview"
+    />
 
-                <p>
-                  Product image uploaded successfully.
-                </p>
+    <p>
+      Product image uploaded successfully.
+    </p>
 
-              </div>
-            )}
+    {productCode ? (
+      <button
+        type="button"
+        className="consumer-upload-button"
+        onClick={verifyUploadedImage}
+        disabled={loading}
+      >
+        {loading
+          ? "Verifying Image..."
+          : "Verify Product Image"}
+      </button>
+    ) : (
+      <p>
+        Please scan the product QR code first.
+      </p>
+    )}
+
+  </div>
+)}
 
           </div>
 

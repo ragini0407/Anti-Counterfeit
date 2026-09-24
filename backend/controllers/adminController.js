@@ -1,13 +1,15 @@
 const Manufacturer = require("../models/Manufacturer");
 const User = require("../models/User");
-const Product = require("../models/Product");
 const Verification = require("../models/Verification");
-
-
+const Product = require("../models/Product");
+const { Wallet } = require("ethers");
 // =====================================================
 // GET PENDING MANUFACTURERS
 // =====================================================
-
+const {
+    getProductFromBlockchain,
+    getManufacturerProducts
+} = require("../services/blockchainService");
 const getPendingManufacturers = async (req, res) => {
     try {
         const manufacturers = await Manufacturer.find({
@@ -171,7 +173,7 @@ const getAdminDashboard = async (req, res) => {
         // -------------------------------------------------
 
         const [
-            totalProducts,
+            
             totalScans,
             genuineScans,
             suspiciousScans,
@@ -183,8 +185,7 @@ const getAdminDashboard = async (req, res) => {
             suspendedManufacturers
         ] = await Promise.all([
 
-            Product.countDocuments(),
-
+          
             Verification.countDocuments(),
 
             Verification.countDocuments({
@@ -238,18 +239,89 @@ const getAdminDashboard = async (req, res) => {
         // ALL PRODUCTS
         // -------------------------------------------------
 
-        const products =
-            await Product.find()
-                .populate(
-                    {
-                        path: "manufacturerId",
-                        select:
-                            "companyName registrationNumber verificationStatus"
-                    }
-                )
-                .sort({
-                    createdAt: -1
-                });
+        // -------------------------------------------------
+// ALL PRODUCTS FROM BLOCKCHAIN
+// -------------------------------------------------
+
+const manufacturerWallet = new Wallet(
+    process.env.MANUFACTURER_PRIVATE_KEY
+);
+
+const productCodes = await getManufacturerProducts(
+    manufacturerWallet.address
+);
+
+const products = [];
+
+for (const productCode of productCodes) {
+    try {
+        const product =
+            await getProductFromBlockchain(productCode);
+        console.log(
+    "BLOCKCHAIN STATUS:",
+    product.productId,
+    product.status,
+    Number(product.status)
+);
+        const totalScans =
+            await Verification.countDocuments({
+                productCode: String(productCode)
+            });
+
+       const statusNumber = Number(product.status);
+
+products.push({
+    productCode: product.productId,
+
+    productName: product.productName,
+
+    category: product.category,
+
+    brandName: product.brandName,
+
+    batchNumber: product.batchNumber,
+
+    manufacturingDate:
+        product.manufacturingDate,
+
+    manufacturer:
+        product.manufacturer,
+
+    productHash:
+        product.productHash,
+
+    imageHash:
+        product.imageHash,
+
+    qrHash:
+        product.qrHash,
+
+    timestamp:
+        product.timestamp
+            ? product.timestamp.toString()
+            : null,
+
+    status:
+    statusNumber === 1
+        ? "GENUINE"
+        : statusNumber === 2
+            ? "SUSPICIOUS"
+            : statusNumber === 3
+                ? "DEACTIVATED"
+                : "UNKNOWN",
+
+    totalScans
+});
+
+    } catch (productError) {
+        console.error(
+            `Could not fetch blockchain product ${productCode}:`,
+            productError.message
+        );
+    }
+}
+
+const totalProducts = products.length;
 
 
         // -------------------------------------------------
@@ -257,18 +329,12 @@ const getAdminDashboard = async (req, res) => {
         // -------------------------------------------------
 
         const recentVerifications =
-            await Verification.find()
-                .populate(
-                    {
-                        path: "productId",
-                        select:
-                            "productName category brandName"
-                    }
-                )
-                .sort({
-                    createdAt: -1
-                })
-                .limit(50);
+    await Verification.find()
+        .sort({
+            createdAt: -1
+        })
+        .limit(50)
+        .lean();
 
 
         // -------------------------------------------------
@@ -276,26 +342,21 @@ const getAdminDashboard = async (req, res) => {
         // -------------------------------------------------
 
         const alerts =
-            await Verification.find({
-                status: {
-                    $in: [
-                        "FAKE",
-                        "SUSPICIOUS"
-                    ]
-                }
-            })
-                .populate(
-                    {
-                        path: "productId",
-                        select:
-                            "productName category brandName"
-                    }
-                )
-                .sort({
-                    createdAt: -1
-                })
-                .limit(50);
-
+    await Verification.find({
+        status: {
+            $in: [
+                "FAKE",
+                "SUSPICIOUS",
+                "INVALID_QR",
+                "FLAGGED"
+            ]
+        }
+    })
+        .sort({
+            createdAt: -1
+        })
+        .limit(50)
+        .lean();
 
         // -------------------------------------------------
         // MAP LOCATIONS
@@ -457,30 +518,29 @@ const getAdminDashboard = async (req, res) => {
         // -------------------------------------------------
 
         const blockchainRecords =
-            products
-                .filter(
-                    product =>
-                        product.blockchainHash
-                )
-                .map(product => ({
-                    productCode:
-                        product.productCode,
+    products.map(product => ({
 
-                    productName:
-                        product.productName,
+        productCode:
+            product.productCode,
 
-                    blockchainHash:
-                        product.blockchainHash,
+        productName:
+            product.productName,
 
-                    manufacturer:
-                        product.manufacturerId
-                            ?.companyName ||
-                        "Unknown",
+        blockchainHash:
+            product.productHash,
 
-                    createdAt:
-                        product.createdAt
-                }));
+        imageHash:
+            product.imageHash,
 
+        qrHash:
+            product.qrHash,
+
+        manufacturer:
+            product.manufacturer,
+
+        timestamp:
+            product.timestamp
+    }));
 
         // -------------------------------------------------
         // SEND EVERYTHING TO FRONTEND

@@ -1,15 +1,85 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./ConsumerDashboard.css";
 
 function ConsumerDashboard({ onLogout, onScanner }) {
-  const [activePage, setActivePage] = useState("dashboard");
-  const [productImage, setProductImage] = useState(null);
-  const [location, setLocation] = useState("");
-  const [verificationResult, setVerificationResult] = useState(null);
+  // ============================================================
+  // STATE
+  // ============================================================
 
-  // =========================
+  const [activePage, setActivePage] = useState("dashboard");
+
+  const [location, setLocation] = useState("");
+
+  const [verificationResult, setVerificationResult] =
+    useState(null);
+
+  const [stats, setStats] = useState({
+    totalScans: 0,
+    genuineScans: 0,
+    suspiciousScans: 0,
+    fakeScans: 0,
+  });
+
+  const [statsLoading, setStatsLoading] =
+    useState(true);
+
+
+  // ============================================================
+  // LOAD CONSUMER DASHBOARD STATISTICS
+  // ============================================================
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setStatsLoading(true);
+
+        const response = await fetch(
+          "http://localhost:5000/api/products/consumer-stats"
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Failed to load consumer statistics"
+          );
+        }
+
+        setStats(
+          data.stats || {
+            totalScans: 0,
+            genuineScans: 0,
+            suspiciousScans: 0,
+            fakeScans: 0,
+          }
+        );
+      } catch (error) {
+        console.error(
+          "Consumer statistics error:",
+          error
+        );
+
+        // Keep dashboard usable even if the API is unavailable
+        setStats({
+          totalScans: 0,
+          genuineScans: 0,
+          suspiciousScans: 0,
+          fakeScans: 0,
+        });
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    loadStats();
+  }, []);
+
+
+  // ============================================================
   // SCAN QR
-  // =========================
+  // ============================================================
+
   const handleScanQR = () => {
     if (onScanner) {
       onScanner();
@@ -18,76 +88,70 @@ function ConsumerDashboard({ onLogout, onScanner }) {
     }
   };
 
-  // =========================
-  // UPLOAD IMAGE
-  // =========================
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
 
-    if (file) {
-      setProductImage(URL.createObjectURL(file));
-      alert("Product image uploaded successfully.");
-    }
-  };
-
-  // =========================
+  // ============================================================
   // SHARE LOCATION
-  // =========================
+  // ============================================================
+
   const handleLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
+      alert(
+        "Geolocation is not supported by your browser."
+      );
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
+        const latitude =
+          position.coords.latitude;
+
+        const longitude =
+          position.coords.longitude;
 
         setLocation(
-          `Latitude: ${latitude.toFixed(5)}, Longitude: ${longitude.toFixed(5)}`
+          `Latitude: ${latitude.toFixed(
+            5
+          )}, Longitude: ${longitude.toFixed(5)}`
         );
 
         alert("Location shared successfully.");
       },
       () => {
-        alert("Unable to access your location.");
+        alert(
+          "Unable to access your location."
+        );
       }
     );
   };
 
-  // =========================
-  // PRODUCT VERIFICATION
-  // =========================
-  const handleVerification = () => {
-    setVerificationResult({
-      status: "Genuine Product",
-      message:
-        "This product appears to be genuine based on the available verification information.",
-      product: "SmartWatch X1",
-      manufacturer: "TechNova Industries",
-      verifiedDate: new Date().toLocaleDateString(),
-    });
 
-    setActivePage("verification");
-  };
-
-  // =========================
+  // ============================================================
   // DASHBOARD
-  // =========================
+  // ============================================================
+
   const renderDashboard = () => {
     return (
       <>
+        {/* ======================================================
+            HEADER
+        ====================================================== */}
+
         <div className="consumer-header">
           <div>
             <h1>Consumer Dashboard</h1>
+
             <p>
-              Verify products and protect yourself from counterfeit products.
+              Verify products and protect yourself
+              from counterfeit products.
             </p>
           </div>
 
           <div className="consumer-profile">
-            <div className="consumer-avatar">C</div>
+            <div className="consumer-avatar">
+              C
+            </div>
+
             <div>
               <strong>Consumer</strong>
               <span>Product Verifier</span>
@@ -95,49 +159,87 @@ function ConsumerDashboard({ onLogout, onScanner }) {
           </div>
         </div>
 
-        {/* STAT CARDS */}
+
+        {/* ======================================================
+            STAT CARDS
+        ====================================================== */}
+
         <div className="consumer-stats">
+
+          {/* TOTAL SCANS */}
           <div className="consumer-stat-card">
-            <div className="stat-icon blue">⌕</div>
+            <div className="stat-icon blue">
+              ⌕
+            </div>
+
             <div>
               <span>Total Scans</span>
-              <strong>24</strong>
+
+              <strong>
+                {statsLoading
+                  ? "..."
+                  : stats.totalScans}
+              </strong>
             </div>
           </div>
 
+
+          {/* GENUINE */}
           <div className="consumer-stat-card">
-            <div className="stat-icon green">✓</div>
+            <div className="stat-icon green">
+              ✓
+            </div>
+
             <div>
               <span>Genuine Products</span>
-              <strong>21</strong>
+
+              <strong>
+                {statsLoading
+                  ? "..."
+                  : stats.genuineScans}
+              </strong>
             </div>
           </div>
 
+
+          {/* COUNTERFEIT */}
           <div className="consumer-stat-card">
-            <div className="stat-icon red">!</div>
+            <div className="stat-icon red">
+              !
+            </div>
+
             <div>
               <span>Counterfeit Found</span>
-              <strong>3</strong>
+
+              <strong>
+                {statsLoading
+                  ? "..."
+                  : stats.fakeScans}
+              </strong>
             </div>
           </div>
+
         </div>
 
-        {/* MAIN ACTIONS */}
-        <div className="consumer-section-title">
-          <h2>Product Verification</h2>
-          <p>Choose an option to verify your product.</p>
-        </div>
+
+        {/* ======================================================
+            MAIN ACTIONS
+        ====================================================== */}
 
         <div className="consumer-actions">
 
           {/* SCAN QR */}
           <div className="consumer-action-card">
-            <div className="action-icon">▦</div>
+
+            <div className="action-icon">
+              ▦
+            </div>
 
             <h3>Scan QR</h3>
 
             <p>
-              Scan the QR code on your product to verify its authenticity.
+              Scan the QR code on your product
+              to verify its authenticity.
             </p>
 
             <button
@@ -146,55 +248,22 @@ function ConsumerDashboard({ onLogout, onScanner }) {
             >
               Scan QR Code →
             </button>
+
           </div>
 
-          {/* PRODUCT VERIFICATION */}
+
+          {/* SHARE LOCATION */}
           <div className="consumer-action-card">
-            <div className="action-icon green-icon">✓</div>
 
-            <h3>Product Verification</h3>
-
-            <p>
-              Check product details and verify whether the product is genuine.
-            </p>
-
-            <button
-              className="consumer-primary-button"
-              onClick={handleVerification}
-            >
-              Verify Product →
-            </button>
-          </div>
-
-          {/* UPLOAD IMAGE */}
-          <div className="consumer-action-card">
-            <div className="action-icon purple-icon">▣</div>
-
-            <h3>Upload Product Image</h3>
-
-            <p>
-              Upload an image of your product for visual verification.
-            </p>
-
-            <label className="consumer-primary-button upload-button">
-              Upload Image
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                hidden
-              />
-            </label>
-          </div>
-
-          {/* LOCATION */}
-          <div className="consumer-action-card">
-            <div className="action-icon orange-icon">⌖</div>
+            <div className="action-icon orange-icon">
+              ⌖
+            </div>
 
             <h3>Share Location</h3>
 
             <p>
-              Share your current location to help identify suspicious activity.
+              Share your current location to help
+              identify suspicious activity.
             </p>
 
             <button
@@ -209,28 +278,16 @@ function ConsumerDashboard({ onLogout, onScanner }) {
                 {location}
               </div>
             )}
+
           </div>
 
         </div>
 
-        {/* UPLOADED IMAGE */}
-        {productImage && (
-          <div className="consumer-upload-preview">
-            <h2>Uploaded Product Image</h2>
 
-            <img
-              src={productImage}
-              alt="Uploaded Product"
-            />
+        {/* ======================================================
+            VERIFICATION RESULT
+        ====================================================== */}
 
-            <p>
-              Image uploaded successfully. Product image is ready for
-              verification.
-            </p>
-          </div>
-        )}
-
-        {/* VERIFICATION RESULT */}
         {verificationResult && (
           <div className="verification-result-card">
 
@@ -244,44 +301,66 @@ function ConsumerDashboard({ onLogout, onScanner }) {
                 VERIFICATION RESULT
               </span>
 
-              <h2>{verificationResult.status}</h2>
+              <h2>
+                {verificationResult.status}
+              </h2>
 
-              <p>{verificationResult.message}</p>
+              <p>
+                {verificationResult.message}
+              </p>
 
               <div className="verification-details">
 
                 <div>
                   <span>Product</span>
-                  <strong>{verificationResult.product}</strong>
+
+                  <strong>
+                    {verificationResult.product}
+                  </strong>
                 </div>
 
                 <div>
                   <span>Manufacturer</span>
-                  <strong>{verificationResult.manufacturer}</strong>
+
+                  <strong>
+                    {verificationResult.manufacturer}
+                  </strong>
                 </div>
 
                 <div>
                   <span>Verified On</span>
-                  <strong>{verificationResult.verifiedDate}</strong>
+
+                  <strong>
+                    {verificationResult.verifiedDate}
+                  </strong>
                 </div>
 
               </div>
 
             </div>
+
           </div>
         )}
+
       </>
     );
   };
 
-  // =========================
-  // RENDER
-  // =========================
+
+  // ============================================================
+  // MAIN RENDER
+  // ============================================================
+
   return (
     <div className="consumer-page">
 
-      {/* SIDEBAR */}
+      {/* ========================================================
+          SIDEBAR
+      ======================================================== */}
+
       <aside className="consumer-sidebar">
+
+        {/* LOGO */}
 
         <div className="consumer-logo">
 
@@ -291,6 +370,7 @@ function ConsumerDashboard({ onLogout, onScanner }) {
           />
 
           <div>
+
             <h2>
               Anti-<span>Counterfeit</span>
             </h2>
@@ -300,12 +380,19 @@ function ConsumerDashboard({ onLogout, onScanner }) {
               <br />
               Product Verification
             </p>
+
           </div>
 
         </div>
 
-        {/* NAVIGATION */}
+
+        {/* ======================================================
+            NAVIGATION
+        ====================================================== */}
+
         <nav className="consumer-nav">
+
+          {/* DASHBOARD */}
 
           <button
             className={
@@ -313,11 +400,16 @@ function ConsumerDashboard({ onLogout, onScanner }) {
                 ? "consumer-nav-item active"
                 : "consumer-nav-item"
             }
-            onClick={() => setActivePage("dashboard")}
+            onClick={() =>
+              setActivePage("dashboard")
+            }
           >
             <span>⌂</span>
             Dashboard
           </button>
+
+
+          {/* SCAN QR */}
 
           <button
             className="consumer-nav-item"
@@ -327,25 +419,8 @@ function ConsumerDashboard({ onLogout, onScanner }) {
             Scan QR
           </button>
 
-          <button
-            className="consumer-nav-item"
-            onClick={handleVerification}
-          >
-            <span>✓</span>
-            Product Verification
-          </button>
 
-          <label className="consumer-nav-item">
-            <span>▣</span>
-            Upload Product Image
-
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              hidden
-            />
-          </label>
+          {/* SHARE LOCATION */}
 
           <button
             className="consumer-nav-item"
@@ -355,13 +430,18 @@ function ConsumerDashboard({ onLogout, onScanner }) {
             Share Location
           </button>
 
+
+          {/* VERIFICATION RESULT */}
+
           <button
             className={
               activePage === "verification"
                 ? "consumer-nav-item active"
                 : "consumer-nav-item"
             }
-            onClick={() => setActivePage("verification")}
+            onClick={() =>
+              setActivePage("verification")
+            }
           >
             <span>◉</span>
             Verification Result
@@ -369,7 +449,11 @@ function ConsumerDashboard({ onLogout, onScanner }) {
 
         </nav>
 
-        {/* LOGOUT */}
+
+        {/* ======================================================
+            LOGOUT
+        ====================================================== */}
+
         <button
           className="consumer-logout"
           onClick={onLogout}
@@ -380,20 +464,30 @@ function ConsumerDashboard({ onLogout, onScanner }) {
 
       </aside>
 
-      {/* MAIN CONTENT */}
+
+      {/* ========================================================
+          MAIN CONTENT
+      ======================================================== */}
+
       <main className="consumer-main">
 
-        {/* TOP BAR */}
+        {/* ======================================================
+            TOP BAR
+        ====================================================== */}
+
         <div className="consumer-topbar">
 
           <div className="consumer-search">
+
             <span>⌕</span>
 
             <input
               type="text"
               placeholder="Search products..."
             />
+
           </div>
+
 
           <div className="consumer-top-actions">
 
@@ -409,23 +503,46 @@ function ConsumerDashboard({ onLogout, onScanner }) {
 
         </div>
 
-        {/* CONTENT */}
+
+        {/* ======================================================
+            CONTENT
+        ====================================================== */}
+
         <div className="consumer-content">
 
-          {activePage === "dashboard" && renderDashboard()}
+          {/* DASHBOARD PAGE */}
+
+          {activePage === "dashboard" &&
+            renderDashboard()}
+
+
+          {/* ====================================================
+              VERIFICATION RESULT PAGE
+          ==================================================== */}
 
           {activePage === "verification" && (
             <>
+
               <div className="consumer-header">
+
                 <div>
-                  <h1>Verification Result</h1>
+
+                  <h1>
+                    Verification Result
+                  </h1>
+
                   <p>
-                    View the latest product verification result.
+                    View the latest product
+                    verification result.
                   </p>
+
                 </div>
+
               </div>
 
+
               {verificationResult ? (
+
                 <div className="verification-result-card">
 
                   <div className="verification-success-icon">
@@ -438,30 +555,43 @@ function ConsumerDashboard({ onLogout, onScanner }) {
                       PRODUCT VERIFIED
                     </span>
 
-                    <h2>{verificationResult.status}</h2>
+                    <h2>
+                      {verificationResult.status}
+                    </h2>
 
-                    <p>{verificationResult.message}</p>
+                    <p>
+                      {verificationResult.message}
+                    </p>
 
                     <div className="verification-details">
 
                       <div>
                         <span>Product</span>
+
                         <strong>
-                          {verificationResult.product}
+                          {
+                            verificationResult.product
+                          }
                         </strong>
                       </div>
 
                       <div>
                         <span>Manufacturer</span>
+
                         <strong>
-                          {verificationResult.manufacturer}
+                          {
+                            verificationResult.manufacturer
+                          }
                         </strong>
                       </div>
 
                       <div>
                         <span>Date</span>
+
                         <strong>
-                          {verificationResult.verifiedDate}
+                          {
+                            verificationResult.verifiedDate
+                          }
                         </strong>
                       </div>
 
@@ -470,12 +600,20 @@ function ConsumerDashboard({ onLogout, onScanner }) {
                   </div>
 
                 </div>
+
               ) : (
+
                 <div className="empty-verification">
+
                   <div>✓</div>
-                  <h2>No Verification Result</h2>
+
+                  <h2>
+                    No Verification Result
+                  </h2>
+
                   <p>
-                    Scan or verify a product to see the result here.
+                    Scan or verify a product
+                    to see the result here.
                   </p>
 
                   <button
@@ -484,8 +622,11 @@ function ConsumerDashboard({ onLogout, onScanner }) {
                   >
                     Scan Product
                   </button>
+
                 </div>
+
               )}
+
             </>
           )}
 

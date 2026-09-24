@@ -1,18 +1,30 @@
-const Product = require("../models/Product");
 const Manufacturer = require("../models/Manufacturer");
 const Verification = require("../models/Verification");
+
 const path = require("path");
 const fs = require("fs/promises");
-const { extractVisualFeatures,compareVisualFeatures } = require("../services/visualFeatureService");
+
 const {
     generateProductQR
 } = require("../services/qrService");
+
 const {
+    createQRHash,
     registerProductOnBlockchain,
-    verifyProductOnBlockchain
+    getProductFromBlockchain,
+    verifyProductOnBlockchain,
+    getManufacturerProducts,
+    deactivateProductOnBlockchain
 } = require("../services/blockchainService");
+
+
+// ============================================================
+// REGISTER PRODUCT
+// ============================================================
+
 const registerProduct = async (req, res) => {
     try {
+
         const {
             productName,
             category,
@@ -21,7 +33,11 @@ const registerProduct = async (req, res) => {
             manufacturingDate
         } = req.body;
 
-        // Check required product fields
+
+        // --------------------------------------------------------
+        // Validate product fields
+        // --------------------------------------------------------
+
         if (
             !productName ||
             !category ||
@@ -34,14 +50,22 @@ const registerProduct = async (req, res) => {
             });
         }
 
-        // Check reference image
+
+        // --------------------------------------------------------
+        // Reference image required
+        // --------------------------------------------------------
+
         if (!req.file) {
             return res.status(400).json({
                 message: "Genuine product reference image is required"
             });
         }
 
-        // Find manufacturer connected to logged-in user
+
+        // --------------------------------------------------------
+        // Find logged-in manufacturer
+        // --------------------------------------------------------
+
         const manufacturer = await Manufacturer.findOne({
             userId: req.user.userId
         });
@@ -52,299 +76,894 @@ const registerProduct = async (req, res) => {
             });
         }
 
+
+        // --------------------------------------------------------
         // Manufacturer must be verified
+        // --------------------------------------------------------
+
         if (manufacturer.verificationStatus !== "VERIFIED") {
             return res.status(403).json({
                 message: "Manufacturer approval required"
             });
         }
 
-        // Generate next product code
-        const lastProduct = await Product.findOne()
-            .sort({ createdAt: -1 });
+
+        // --------------------------------------------------------
+        // Generate product code
+        //
+        // We no longer use MongoDB to generate the code.
+        // --------------------------------------------------------
+
+        const manufacturerAddress =
+            process.env.MANUFACTURER_PRIVATE_KEY
+                ? new (require("ethers").Wallet)(
+                    process.env.MANUFACTURER_PRIVATE_KEY
+                ).address
+                : null;
+
+        if (!manufacturerAddress) {
+            return res.status(500).json({
+                message: "Manufacturer blockchain wallet is not configured"
+            });
+        }
+
+
+        // Get existing products from blockchain
+        const existingProductCodes =
+            await getManufacturerProducts(manufacturerAddress);
+
 
         let nextNumber = 1;
 
-        if (lastProduct && lastProduct.productCode) {
-            const lastNumber = parseInt(
-                lastProduct.productCode.replace("FPD", ""),
-                10
-            );
+        for (const code of existingProductCodes) {
 
-            if (!isNaN(lastNumber)) {
-                nextNumber = lastNumber + 1;
+            const match = String(code).match(/^FPD(\d+)$/);
+
+            if (match) {
+
+                const number = parseInt(match[1], 10);
+
+                if (!isNaN(number) && number >= nextNumber) {
+                    nextNumber = number + 1;
+                }
             }
         }
 
-        const productCode = `FPD${String(nextNumber).padStart(4, "0")}`;
-    const blockchainResult =
-    await registerProductOnBlockchain({
-        productCode,
-        productName,
-        category,
-        brandName,
-        batchNumber,
-        manufacturingDate,
-        manufacturer: manufacturer._id.toString()
-    });
-        // Save image path
-       const referenceImage =
-    `/uploads/products/${req.file.filename}`;
 
-// Get the actual uploaded image path
-const imagePath = path.join(
-    process.cwd(),
-    "uploads",
-    "products",
-    req.file.filename
-);
+        const productCode =
+            `FPD${String(nextNumber).padStart(4, "0")}`;
 
-// Extract visual features
-const visualFeatures = await extractVisualFeatures(imagePath);
-const qrCode = await generateProductQR(productCode);
-// Create product
-const product = await Product.create({
-    productCode,
-    productName,
-    category,
-    brandName,
-    batchNumber,
-    manufacturingDate,
-    manufacturerId: manufacturer._id,
-    referenceImage,
-    visualFeatures,
-    blockchainHash: blockchainResult.productHash,
-    qrCode
-});
 
-        res.status(201).json({
-    message: "Product registered successfully",
-    blockchain: {
-        transactionHash: blockchainResult.transactionHash,
-        manufacturerWallet: blockchainResult.manufacturerWallet,
-        productHash: blockchainResult.productHash
-    },
-    product
-});
+        // --------------------------------------------------------
+        // Read reference image
+        // --------------------------------------------------------
+
+        const imagePath = path.join(
+            process.cwd(),
+            "uploads",
+            "products",
+            req.file.filename
+        );
+
+        const imageBuffer = await fs.readFile(imagePath);
+
+
+        // --------------------------------------------------------
+        // QR data
+        //
+        // The QR represents the product code.
+        // --------------------------------------------------------
+
+        const qrData = productCode;
+
+        const qrHash = createQRHash(qrData);
+
+
+        // --------------------------------------------------------
+        // Register EVERYTHING on blockchain
+        // --------------------------------------------------------
+
+        const blockchainResult =
+            await registerProductOnBlockchain({
+
+                productCode,
+
+                productName,
+
+                category,
+
+                brandName,
+
+                batchNumber,
+
+                manufacturingDate,
+
+                manufacturer: manufacturerAddress,
+
+                imageBuffer,
+
+                qrData
+            });
+
+
+        // --------------------------------------------------------
+        // Generate QR image
+        // --------------------------------------------------------
+
+        const qrCode =
+            await generateProductQR(productCode);
+
+
+        // --------------------------------------------------------
+        // Return result
+        // --------------------------------------------------------
+
+        return res.status(201).json({
+
+            message: "Product registered successfully",
+
+            product: {
+
+                productCode,
+
+                productName,
+
+                category,
+
+                brandName,
+
+                batchNumber,
+
+                manufacturingDate,
+
+                manufacturer: manufacturerAddress,
+
+                qrCode,
+
+                productHash:
+                    blockchainResult.productHash,
+
+                imageHash:
+                    blockchainResult.imageHash,
+
+                qrHash:
+                    blockchainResult.qrHash || qrHash
+            },
+
+            blockchain: {
+
+                transactionHash:
+                    blockchainResult.transactionHash,
+
+                manufacturerWallet:
+                    blockchainResult.manufacturerWallet,
+
+                productHash:
+                    blockchainResult.productHash,
+
+                imageHash:
+                    blockchainResult.imageHash,
+
+                qrHash:
+                    blockchainResult.qrHash || qrHash
+            }
+        });
+
 
     } catch (error) {
-        console.error("Product registration error:", error);
 
-        res.status(500).json({
-            message: "Product registration failed"
+        console.error(
+            "Product registration error:",
+            error
+        );
+
+        return res.status(500).json({
+            message: "Product registration failed",
+            error: error.message
         });
     }
 };
+
+
+// ============================================================
+// VERIFY PRODUCT BY QR
+// ============================================================
 
 const verifyProductByQR = async (req, res) => {
     try {
+
         const { productCode } = req.params;
-        const { latitude, longitude } = req.body;
-        if (latitude === undefined || longitude === undefined) {
-    return res.status(400).json({
-        verified: false,
-        message: "Location is required"
-    });
-}
-        const product = await Product.findOne({ productCode });
 
-       if (!product) {
-    return res.status(404).json({
-        verified: false,
-        status: "FAKE",
-        message: "Product is not registered"
-       });
-    }
-    const blockchainResult =
-    await verifyProductOnBlockchain(
-        product.productCode,
-        product.blockchainHash
-    );
-    if (
-    !blockchainResult.exists ||
-    !blockchainResult.hashMatches ||
-    blockchainResult.isFlagged
-) {
-    return res.status(200).json({
-        verified: false,
-        status: "FAKE",
-        message: "Blockchain verification failed",
-        product: {
-            productCode: product.productCode,
-            productName: product.productName,
-            category: product.category,
-            brandName: product.brandName
-        }
-    });
-}  
+        const {
+            latitude,
+            longitude
+        } = req.body || {};
 
-        // Count this QR scan
-        product.totalScans += 1;
-        await product.save();
-        await Verification.create({
-    productId: product._id,
-    productCode: product.productCode,
-    verificationType: "QR",
-    status: product.verificationStatus,
-    location: {
-        latitude,
-        longitude
-    }
-});
-        return res.status(200).json({
-            verified: true,
-            status: product.verificationStatus,
-            message: "Product is registered",
-            product: {
-                productCode: product.productCode,
-                productName: product.productName,
-                category: product.category,
-                brandName: product.brandName,
-                batchNumber: product.batchNumber,
-                manufacturingDate: product.manufacturingDate,
-                totalScans: product.totalScans
-            }
-        });
 
-    } catch (error) {
-        console.error("QR verification error:", error);
+        // ========================================================
+        // LOCATION
+        // ========================================================
 
-        return res.status(500).json({
-            verified: false,
-            message: "Server error during QR verification"
-        });
-    }
-};
-const verifyProductImage = async (req, res) => {
-    let uploadedFilePath = null;
-
-    try {
-        const { productCode } = req.params;
-        const { latitude, longitude } = req.body;
-        if (latitude === undefined || longitude === undefined) {
-    return res.status(400).json({
-        verified: false,
-        message: "Location is required"
-    });
-}
-        if (!req.file) {
+        if (
+            latitude === undefined ||
+            longitude === undefined
+        ) {
             return res.status(400).json({
                 verified: false,
-                message: "Product image is required"
+                message: "Location is required"
             });
         }
 
-        // Remember the uploaded file so we can delete it later
-        uploadedFilePath = req.file.path;
 
-        // Find product in MongoDB
-        const product = await Product.findOne({ productCode });
+       // ========================================================
+// CHECK BLOCKCHAIN RECORD FIRST
+// ========================================================
 
-        if (!product) {
-            return res.status(404).json({
-                verified: false,
-                status: "FAKE",
-                message: "Product is not registered"
-            });
+const blockchainResult =
+    await verifyProductOnBlockchain(productCode);
+
+
+// ========================================================
+// PRODUCT DOES NOT EXIST
+// ========================================================
+
+if (!blockchainResult.exists) {
+
+    await Verification.create({
+        productCode,
+        verificationType: "QR",
+        status: "NOT_REGISTERED",
+        location: {
+            latitude,
+            longitude
         }
+    });
 
-        // Check blockchain record
-        const blockchainResult =
-            await verifyProductOnBlockchain(
-                product.productCode,
-                product.blockchainHash
-            );
+    return res.status(200).json({
 
-        // Blockchain must contain the product,
-        // hash must match, and product must not be flagged
-        if (
-            !blockchainResult.exists ||
-            !blockchainResult.hashMatches ||
-            blockchainResult.isFlagged
-        ) {
+        verified: false,
+
+        status: "NOT_REGISTERED",
+
+        message:
+            "Product is not registered on the blockchain",
+
+        blockchain: {
+            checked: true,
+            exists: false,
+            active: false,
+            flagged: false,
+            qrMatched: false
+        }
+    });
+}
+
+
+// ========================================================
+// PRODUCT EXISTS, NOW GET COMPLETE PRODUCT DETAILS
+// ========================================================
+
+const product =
+    await getProductFromBlockchain(productCode);
+
+        // ========================================================
+        // QR HASH VERIFICATION
+        // ========================================================
+
+        const expectedQRHash =
+            createQRHash(productCode);
+
+        const qrMatches =
+            blockchainResult.qrHash === expectedQRHash;
+
+
+        // ========================================================
+        // PRODUCT FLAGGED
+        // ========================================================
+
+        if (blockchainResult.isFlagged) {
+
+            await Verification.create({
+                productCode,
+                verificationType: "QR",
+                status: "FLAGGED",
+                location: {
+                    latitude,
+                    longitude
+                }
+            });
+
             return res.status(200).json({
+
                 verified: false,
-                status: "FAKE",
-                message: "Blockchain verification failed",
+
+                status: "FLAGGED",
+
+                message:
+                    "Product has been flagged on the blockchain",
+
                 product: {
-                    productCode: product.productCode,
-                    productName: product.productName,
-                    brandName: product.brandName
+                    productCode:
+                        product.productId,
+
+                    productName:
+                        product.productName,
+
+                    category:
+                        product.category,
+
+                    brandName:
+                        product.brandName
+                },
+
+                blockchain: {
+                    checked: true,
+                    exists: true,
+                    active: blockchainResult.isActive,
+                    flagged: true,
+                    qrMatched: qrMatches
                 }
             });
         }
 
-        // Check reference visual features
-        if (
-            !product.visualFeatures ||
-            product.visualFeatures.length === 0
-        ) {
-            return res.status(400).json({
+
+        // ========================================================
+        // PRODUCT DEACTIVATED
+        // ========================================================
+
+        if (!blockchainResult.isActive) {
+
+            await Verification.create({
+                productCode,
+                verificationType: "QR",
+                status: "DEACTIVATED",
+                location: {
+                    latitude,
+                    longitude
+                }
+            });
+
+            return res.status(200).json({
+
                 verified: false,
-                message: "Reference visual features are not available"
+
+                status: "DEACTIVATED",
+
+                message:
+                    "Product has been deactivated",
+
+                product: {
+                    productCode:
+                        product.productId,
+
+                    productName:
+                        product.productName,
+
+                    category:
+                        product.category,
+
+                    brandName:
+                        product.brandName
+                },
+
+                blockchain: {
+                    checked: true,
+                    exists: true,
+                    active: false,
+                    flagged: false,
+                    qrMatched: qrMatches
+                }
             });
         }
 
-        // Extract features from consumer image
-        const testFeatures =
-            await extractVisualFeatures(uploadedFilePath);
 
-        // Compare with genuine reference features
-        const similarity = compareVisualFeatures(
-            product.visualFeatures,
-            testFeatures
-        );
+        // ========================================================
+        // QR HASH DOES NOT MATCH
+        // ========================================================
 
-        let status;
+        if (!qrMatches) {
 
-        if (similarity >= 90) {
-            status = "GENUINE";
-        } else if (similarity >= 70) {
-            status = "SUSPICIOUS";
-        } else {
-            status = "FAKE";
+            await Verification.create({
+                productCode,
+                verificationType: "QR",
+                status: "INVALID_QR",
+                location: {
+                    latitude,
+                    longitude
+                }
+            });
+
+            return res.status(200).json({
+
+                verified: false,
+
+                status: "INVALID_QR",
+
+                message:
+                    "QR verification failed. Possible counterfeit product.",
+
+                product: {
+                    productCode:
+                        product.productId,
+
+                    productName:
+                        product.productName,
+
+                    category:
+                        product.category,
+
+                    brandName:
+                        product.brandName
+                },
+
+                blockchain: {
+                    checked: true,
+                    exists: true,
+                    active: true,
+                    flagged: false,
+                    qrMatched: false
+                }
+            });
         }
+
+
+        // ========================================================
+        // EVERYTHING PASSED
+        // ========================================================
+
+        const totalScans =
+            await Verification.countDocuments({
+                productCode,
+                verificationType: "QR"
+            });
+
+
         await Verification.create({
-    productId: product._id,
-    productCode: product.productCode,
-    verificationType: "IMAGE",
-    status,
-    similarity,
-    location: {
-        latitude,
-        longitude
-    }
-});
-        return res.status(200).json({
-            verified: status === "GENUINE",
-            status,
-            similarity,
-            blockchainVerified: true,
-            product: {
-                productCode: product.productCode,
-                productName: product.productName,
-                brandName: product.brandName
+            productCode,
+            verificationType: "QR",
+            status: "GENUINE",
+            location: {
+                latitude,
+                longitude
             }
         });
 
+
+        return res.status(200).json({
+
+            verified: true,
+
+            status: "GENUINE",
+
+            message:
+                "Product is genuine",
+
+            product: {
+
+                productCode:
+                    product.productId,
+
+                productName:
+                    product.productName,
+
+                category:
+                    product.category,
+
+                brandName:
+                    product.brandName,
+
+                batchNumber:
+                    product.batchNumber,
+
+                manufacturingDate:
+                    product.manufacturingDate,
+
+                manufacturer:
+                    product.manufacturer,
+
+                totalScans:
+                    totalScans + 1
+            },
+
+            blockchain: {
+
+                checked: true,
+
+                exists:
+                    blockchainResult.exists,
+
+                active:
+                    blockchainResult.isActive,
+
+                flagged:
+                    blockchainResult.isFlagged,
+
+                qrMatched: true,
+
+                productHash:
+                    product.productHash,
+
+                imageHash:
+                    product.imageHash,
+
+                qrHash:
+                    product.qrHash
+            }
+        });
+
+
     } catch (error) {
+
+        console.error(
+            "QR verification error:",
+            error
+        );
+
+        return res.status(500).json({
+
+            verified: false,
+
+            message:
+                "Server error during QR verification",
+
+            error:
+                error.message
+        });
+    }
+};
+
+// ============================================================
+// VERIFY PRODUCT BY IMAGE
+// ============================================================
+
+const verifyProductImage = async (req, res) => {
+
+    let uploadedFilePath = null;
+
+    try {
+
+        const { productCode } = req.params;
+
+        const {
+            latitude,
+            longitude
+        } = req.body || {};
+
+
+        // --------------------------------------------------------
+        // Location required
+        // --------------------------------------------------------
+
+        if (
+            latitude === undefined ||
+            longitude === undefined
+        ) {
+
+            return res.status(400).json({
+
+                verified: false,
+
+                message: "Location is required"
+            });
+        }
+
+
+        // --------------------------------------------------------
+        // Image required
+        // --------------------------------------------------------
+
+        if (!req.file) {
+
+            return res.status(400).json({
+
+                verified: false,
+
+                message: "Product image is required"
+            });
+        }
+
+
+        uploadedFilePath =
+            req.file.path;
+
+
+        // --------------------------------------------------------
+        // Get product from blockchain
+        // --------------------------------------------------------
+
+        const product =
+            await getProductFromBlockchain(productCode);
+
+
+        if (!product) {
+
+            return res.status(404).json({
+
+                verified: false,
+
+                status: "FAKE",
+
+                message: "Product is not registered"
+            });
+        }
+
+
+        // --------------------------------------------------------
+        // Verify blockchain record
+        // --------------------------------------------------------
+
+        const blockchainResult =
+            await verifyProductOnBlockchain(productCode);
+
+
+        if (
+            !blockchainResult.exists ||
+            !blockchainResult.isActive ||
+            blockchainResult.isFlagged
+        ) {
+
+            await Verification.create({
+
+                productCode,
+
+                verificationType: "IMAGE",
+
+                status: "FAKE",
+
+                location: {
+
+                    latitude,
+
+                    longitude
+                }
+            });
+
+
+            return res.status(200).json({
+
+                verified: false,
+
+                status: "FAKE",
+
+                message:
+                    "Blockchain verification failed",
+
+                product: {
+
+                    productCode:
+                        product.productId,
+
+                    productName:
+                        product.productName,
+
+                    brandName:
+                        product.brandName
+                }
+            });
+        }
+
+
+        // --------------------------------------------------------
+        // Read consumer image
+        // --------------------------------------------------------
+
+        const imageBuffer =
+            await fs.readFile(
+                uploadedFilePath
+            );
+
+
+        // --------------------------------------------------------
+        // Send image to Python AI service
+        // --------------------------------------------------------
+
+        const formData =
+            new FormData();
+
+
+        const imageBlob =
+            new Blob(
+                [imageBuffer],
+                {
+                    type:
+                        req.file.mimetype ||
+                        "application/octet-stream"
+                }
+            );
+
+
+        formData.append(
+            "file",
+            imageBlob,
+            req.file.originalname ||
+            "product-image.jpg"
+        );
+
+
+        const aiResponse =
+            await fetch(
+                `${process.env.AI_SERVICE_URL}/predict`,
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
+
+
+        // --------------------------------------------------------
+        // AI service unavailable
+        // --------------------------------------------------------
+
+        if (!aiResponse.ok) {
+
+            const aiError =
+                await aiResponse.text();
+
+            console.error(
+                "AI service error:",
+                aiError
+            );
+
+
+            return res.status(503).json({
+
+                verified: false,
+
+                message:
+                    "AI verification service unavailable"
+            });
+        }
+
+
+        const aiResult =
+            await aiResponse.json();
+
+
+        const aiPrediction =
+            aiResult.prediction;
+
+
+        const aiConfidence =
+            Number(aiResult.confidence);
+
+
+        // --------------------------------------------------------
+        // Convert AI result
+        // --------------------------------------------------------
+
+        let status;
+
+
+        if (
+            aiPrediction === "fake"
+        ) {
+
+            status = "FAKE";
+
+        } else if (
+            aiPrediction === "genuine"
+        ) {
+
+            status = "GENUINE";
+
+        } else {
+
+            status = "SUSPICIOUS";
+        }
+
+
+        // --------------------------------------------------------
+        // Save verification history
+        // --------------------------------------------------------
+
+        await Verification.create({
+
+            productCode,
+
+            verificationType: "IMAGE",
+
+            status,
+
+            aiConfidence,
+
+            location: {
+
+                latitude,
+
+                longitude
+            }
+        });
+
+
+        // --------------------------------------------------------
+        // Response
+        // --------------------------------------------------------
+
+        return res.status(200).json({
+
+            verified:
+                status === "GENUINE",
+
+            status,
+
+            aiPrediction,
+
+            aiConfidence,
+
+            blockchainVerified: true,
+
+            product: {
+
+                productCode:
+                    product.productId,
+
+                productName:
+                    product.productName,
+
+                category:
+                    product.category,
+
+                brandName:
+                    product.brandName,
+
+                batchNumber:
+                    product.batchNumber,
+
+                manufacturingDate:
+                    product.manufacturingDate
+            },
+
+            blockchain: {
+
+                productHash:
+                    product.productHash,
+
+                imageHash:
+                    product.imageHash,
+
+                qrHash:
+                    product.qrHash
+            }
+        });
+
+
+    } catch (error) {
+
         console.error(
             "Product image verification error:",
             error
         );
 
+
         return res.status(500).json({
+
             verified: false,
-            message: "Server error during image verification"
+
+            message:
+                "Server error during image verification"
         });
 
+
     } finally {
-        // Delete consumer verification image after processing
+
+        // --------------------------------------------------------
+        // Delete customer's uploaded verification image
+        // --------------------------------------------------------
+
         if (uploadedFilePath) {
+
             try {
-                await fs.unlink(uploadedFilePath);
-                console.log("Verification image deleted");
+
+                await fs.unlink(
+                    uploadedFilePath
+                );
+
+                console.log(
+                    "Verification image deleted"
+                );
+
             } catch (deleteError) {
+
                 console.error(
                     "Could not delete verification image:",
                     deleteError.message
@@ -353,40 +972,283 @@ const verifyProductImage = async (req, res) => {
         }
     }
 };
+
+
+// ============================================================
+// GET MY PRODUCTS
+// ============================================================
+
 const getMyProducts = async (req, res) => {
+
     try {
-        // Find manufacturer linked to logged-in user
-        const manufacturer = await Manufacturer.findOne({
-            userId: req.user.userId
-        });
+
+        const manufacturer =
+            await Manufacturer.findOne({
+                userId: req.user.userId
+            });
+
 
         if (!manufacturer) {
+
             return res.status(404).json({
-                message: "Manufacturer profile not found"
+
+                message:
+                    "Manufacturer profile not found"
             });
         }
 
-        // Get products belonging to this manufacturer
-        const products = await Product.find({
-            manufacturerId: manufacturer._id
-        }).sort({ createdAt: -1 });
 
-        res.status(200).json({
+        // --------------------------------------------------------
+        // Get blockchain wallet
+        // --------------------------------------------------------
+
+        const { Wallet } =
+            require("ethers");
+
+
+        const manufacturerWallet =
+            new Wallet(
+                process.env.MANUFACTURER_PRIVATE_KEY
+            );
+
+
+        // --------------------------------------------------------
+        // Get product IDs from blockchain
+        // --------------------------------------------------------
+
+        const productCodes =
+            await getManufacturerProducts(
+                manufacturerWallet.address
+            );
+
+
+        // --------------------------------------------------------
+        // Get complete product data
+        // --------------------------------------------------------
+
+        const products = [];
+
+
+        for (
+            const productCode of productCodes
+        ) {
+
+            try {
+
+                const product =
+                    await getProductFromBlockchain(
+                        productCode
+                    );
+
+
+                const totalScans =
+                    await Verification.countDocuments({
+                        productCode:
+                            String(productCode)
+                    });
+
+
+                products.push({
+
+                    productCode:
+                        product.productId,
+
+                    productName:
+                        product.productName,
+
+                    category:
+                        product.category,
+
+                    brandName:
+                        product.brandName,
+
+                    batchNumber:
+                        product.batchNumber,
+
+                    manufacturingDate:
+                        product.manufacturingDate,
+
+                    manufacturer:
+                        product.manufacturer,
+
+                    productHash:
+                        product.productHash,
+
+                    imageHash:
+                        product.imageHash,
+
+                    qrHash:
+                        product.qrHash,
+
+                    timestamp:
+                        product.timestamp.toString(),
+
+                    status:
+    product.status === 1
+        ? "GENUINE"
+        : product.status === 2
+            ? "SUSPICIOUS"
+            : product.status === 3
+                ? "DEACTIVATED"
+                : "UNKNOWN",
+
+                    totalScans
+                });
+
+
+            } catch (productError) {
+
+                console.error(
+                    `Could not fetch ${productCode}:`,
+                    productError.message
+                );
+            }
+        }
+
+
+        return res.status(200).json({
+
             count: products.length,
+
             products
         });
 
-    } catch (error) {
-        console.error("Get my products error:", error);
 
-        res.status(500).json({
-            message: "Server error while fetching products"
+    } catch (error) {
+
+        console.error(
+            "Get my products error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            message:
+                "Server error while fetching products"
         });
     }
 };
+
+
+// ============================================================
+// DEACTIVATE PRODUCT
+// ============================================================
+
+const deleteProduct = async (req, res) => {
+
+    try {
+
+        const { productCode } =
+            req.params;
+
+
+        // --------------------------------------------------------
+        // Deactivate on blockchain
+        // --------------------------------------------------------
+
+        const result =
+            await deactivateProductOnBlockchain(
+                productCode
+            );
+
+
+        return res.status(200).json({
+
+            message:
+                "Product deactivated successfully",
+
+            productCode,
+
+            transactionHash:
+                result.transactionHash
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Product deletion error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            message:
+                "Product deletion failed",
+
+            error:
+                error.message
+        });
+    }
+};
+
+// ============================================================
+// CONSUMER DASHBOARD STATISTICS
+// ============================================================
+
+const getConsumerStats = async (req, res) => {
+    try {
+        const [
+            totalScans,
+            genuineScans,
+            suspiciousScans,
+            fakeScans
+        ] = await Promise.all([
+            Verification.countDocuments(),
+
+            Verification.countDocuments({
+                status: "GENUINE"
+            }),
+
+            Verification.countDocuments({
+                status: "SUSPICIOUS"
+            }),
+
+            Verification.countDocuments({
+                status: "FAKE"
+            })
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            stats: {
+                totalScans,
+                genuineScans,
+                suspiciousScans,
+                fakeScans
+            }
+        });
+
+    } catch (error) {
+        console.error(
+            "Consumer dashboard stats error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Server error while fetching consumer statistics"
+        });
+    }
+};
+
+// ============================================================
+// EXPORTS
+// ============================================================
+
 module.exports = {
+
     registerProduct,
+
     verifyProductByQR,
+
     verifyProductImage,
-    getMyProducts
+
+    getMyProducts,
+
+    deleteProduct,
+    getConsumerStats
 };

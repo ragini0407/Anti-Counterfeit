@@ -266,23 +266,55 @@ useEffect(() => {
   // DELETE PRODUCT
   // =====================================================
 
-  const deleteProduct = (id) => {
+  const deleteProduct = async (productCode) => {
+  const confirmed = window.confirm(
+    "Are you sure you want to deactivate this product?"
+  );
 
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to delete this product?"
-      );
+  if (!confirmed) return;
 
-    if (!confirmed) return;
+  try {
+    const token = localStorage.getItem("token");
 
-    setProducts((previous) =>
-      previous.filter(
-        (product) => product.id !== id
-      )
+    if (!token) {
+      alert("Login session expired. Please login again.");
+      return;
+    }
+
+    const response = await fetch(
+      `http://localhost:5000/api/products/${productCode}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
     );
 
-    alert("Product deleted successfully.");
-  };
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.message || "Product deactivation failed"
+      );
+    }
+
+    alert(
+      `Product ${productCode} deactivated successfully.`
+    );
+
+    // Reload products from blockchain
+    await fetchMyProducts();
+
+  } catch (error) {
+    console.error(
+      "Product deactivation error:",
+      error
+    );
+
+    alert(error.message);
+  }
+};
 
   // =====================================================
   // GENERATE QR
@@ -948,18 +980,22 @@ useEffect(() => {
 
                     <span
                       className={
-                        product.verificationStatus === "GENUINE"
-                          ? "status genuine"
-                          : product.verificationStatus === "SUSPICIOUS"
-                          ? "status suspicious"
-                          : "status fake"
+                        product.status === "GENUINE"
+  ? "status genuine"
+  : product.status === "SUSPICIOUS"
+  ? "status suspicious"
+  : product.status === "DEACTIVATED"
+  ? "status deactivated"
+  : "status unknown"
                       }
                     >
-                      {product.verificationStatus === "GENUINE"
-                        ? "✓ Genuine"
-                        : product.verificationStatus === "SUSPICIOUS"
-                        ? "⚠ Suspicious"
-                        : "✕ Fake"}
+                      {product.status === "GENUINE"
+  ? "✓ Genuine"
+  : product.status === "SUSPICIOUS"
+  ? "⚠ Suspicious"
+  : product.status === "DEACTIVATED"
+  ? "🚫 Deactivated"
+  : "❓ Unknown"}
                     </span>
 
                   </td>
@@ -983,7 +1019,7 @@ useEffect(() => {
                       <button
                         className="delete-button"
                         onClick={() =>
-                          deleteProduct(product._id)
+                          deleteProduct(product.productCode)
                         }
                       >
                         Delete
