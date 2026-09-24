@@ -33,6 +33,9 @@ Consumer-uploaded image -> genuine/fake classification via CNN.
 ```
 `prediction` is `"genuine"` or `"fake"`. `confidence` is 0-1 (probability of the predicted class).
 
+Decision threshold: genuine requires >=65% confidence (not 50%) - validated against test data to
+reduce missed fakes. See ai/report_assets/threshold_analysis.png for the full comparison.
+
 **Model:** trained on the "Fake vs Real Medicine Dataset" (Kaggle), 866 real medicine-packaging images.
 Test accuracy: 96.66%. Model file: `ai/models/saved_models/cnn_fake_detector.h5`.
 
