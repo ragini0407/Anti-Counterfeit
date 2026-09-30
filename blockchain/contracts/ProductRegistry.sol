@@ -1,53 +1,60 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+/**
+ * ProductRegistry Smart Contract
+ * Network: Polygon Amoy Testnet
+ *
+ * productHash: SHA256 hash of core product data
+ *   (productId + name + batchNumber + manufactureDate + manufacturerId)
+ *   Used for tamper detection. If product data changes,
+ *   hash changes and verification fails.
+ *
+ * ipfsImageHash: IPFS CID of manufacturer's master reference image.
+ *   Used by AI team for visual similarity comparison.
+ *   Stored on blockchain as immutable reference only.
+ *   AI processing happens off-chain.
+ */
+
 contract ProductRegistry {
 
-    // ── Product States ──────────────────────────────────
+    // ── Product States ────────────────────────────────────
     enum ProductState {
-        MINTED,
-        IN_TRANSIT,
-        RECEIVED_BY_RETAILER,
-        SOLD,
-        FLAGGED_COUNTERFEIT
+        MINTED,                // 0 - registered by manufacturer
+        IN_TRANSIT,            // 1 - taken by distributor
+        RECEIVED_BY_RETAILER,  // 2 - received by retailer
+        SOLD,                  // 3 - verified by consumer
+        FLAGGED_COUNTERFEIT    // 4 - flagged as fake
     }
 
-    // ── Roles ────────────────────────────────────────────
+    // ── Roles ─────────────────────────────────────────────
     enum Role {
-        NONE,
-        MANUFACTURER,
-        DISTRIBUTOR,
-        RETAILER
+        NONE,           // 0
+        MANUFACTURER,   // 1
+        DISTRIBUTOR,    // 2
+        RETAILER        // 3
     }
 
-    // ── Structs ──────────────────────────────────────────
+    // ── Structs ───────────────────────────────────────────
     struct Product {
         string       productId;
         string       manufacturerId;
-        string       productHash;
-        string       ipfsImageHash;
+        string       productHash;      // SHA256 of product data
+        string       ipfsImageHash;    // IPFS CID of master image
         uint256      mintedAt;
         ProductState state;
         bool         exists;
         address      currentOwner;
-    }
-
-    struct ScanLog {
-        string   productId;
-        string   city;
-        string   country;
-        int256   latitude;
-        int256   longitude;
-        uint256  timestamp;
-        address  scanner;
+        address      authorizedDistributor; // Fix #5
+        address      authorizedRetailer;    // Fix #6
     }
 
     struct RoleRequest {
-        address  requester;
-        Role     requestedRole;
-        string   companyName;
-        bool     approved;
-        bool     exists;
+        address requester;
+        Role    requestedRole;
+        string  companyName;
+        bool    approved;
+        bool    exists;
     }
 
     // ── State Variables ───────────────────────────────────
@@ -57,14 +64,13 @@ contract ProductRegistry {
     mapping(address => string)      public  companyNames;
     mapping(address => RoleRequest) public  roleRequests;
     mapping(string  => Product)     private products;
-    mapping(string  => ScanLog[])   private scanHistory;
-    mapping(string  => uint256)     private lastScanTime;
-    mapping(string  => string)      private lastScanCity;
+    mapping(string  => uint256)     private scanCount;
 
     // ── Events ────────────────────────────────────────────
     event ProductMinted(
         string indexed productId,
         string manufacturerId,
+        string productHash,
         string ipfsImageHash,
         uint256 timestamp
     );
@@ -72,11 +78,18 @@ contract ProductRegistry {
         string indexed productId,
         ProductState oldState,
         ProductState newState,
+        address updatedBy,
         uint256 timestamp
     );
     event ProductFlagged(
         string indexed productId,
         string reason,
+        uint256 timestamp
+    );
+    event CustodyAssigned(
+        string indexed productId,
+        address distributor,
+        address retailer,
         uint256 timestamp
     );
     event RoleRequested(
@@ -91,11 +104,9 @@ contract ProductRegistry {
     event RoleRevoked(
         address indexed account
     );
-    event ScanLogged(
+    event ProductVerified(
         string indexed productId,
-        string city,
-        int256 latitude,
-        int256 longitude,
+        bool genuine,
         uint256 timestamp
     );
 
@@ -139,9 +150,9 @@ contract ProductRegistry {
         admin = msg.sender;
     }
 
-    // ══════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════
     // ROLE MANAGEMENT
-    // ══════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════
 
     function requestRole(
         Role _role,
@@ -152,7 +163,6 @@ contract ProductRegistry {
             roles[msg.sender] == Role.NONE,
             "Already has a role"
         );
-
         roleRequests[msg.sender] = RoleRequest({
             requester:     msg.sender,
             requestedRole: _role,
@@ -160,7 +170,6 @@ contract ProductRegistry {
             approved:      false,
             exists:        true
         });
-
         emit RoleRequested(msg.sender, _role, _companyName);
     }
 
@@ -173,11 +182,10 @@ contract ProductRegistry {
             !roleRequests[_account].approved,
             "Already approved"
         );
-
         roles[_account] = roleRequests[_account].requestedRole;
-        companyNames[_account] = roleRequests[_account].companyName;
+        companyNames[_account] =
+            roleRequests[_account].companyName;
         roleRequests[_account].approved = true;
-
         emit RoleApproved(_account, roles[_account]);
     }
 
@@ -196,15 +204,22 @@ contract ProductRegistry {
         return roles[_account];
     }
 
-    // ══════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════
     // PRODUCT LIFECYCLE
-    // ══════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════
 
+    /**
+     * MANUFACTURER mints a new product token
+     * Also assigns authorized distributor and retailer
+     * Fix #5 and #6 - specific authorization
+     */
     function mintProduct(
         string memory _productId,
         string memory _manufacturerId,
         string memory _productHash,
-        string memory _ipfsImageHash
+        string memory _ipfsImageHash,
+        address _authorizedDistributor,
+        address _authorizedRetailer
     ) public onlyManufacturer {
         require(
             !products[_productId].exists,
@@ -214,32 +229,58 @@ contract ProductRegistry {
             bytes(_productId).length > 0,
             "Product ID cannot be empty"
         );
+        require(
+            roles[_authorizedDistributor] == Role.DISTRIBUTOR,
+            "Invalid distributor address"
+        );
+        require(
+            roles[_authorizedRetailer] == Role.RETAILER,
+            "Invalid retailer address"
+        );
 
         products[_productId] = Product({
-            productId:      _productId,
-            manufacturerId: _manufacturerId,
-            productHash:    _productHash,
-            ipfsImageHash:  _ipfsImageHash,
-            mintedAt:       block.timestamp,
-            state:          ProductState.MINTED,
-            exists:         true,
-            currentOwner:   msg.sender
+            productId:             _productId,
+            manufacturerId:        _manufacturerId,
+            productHash:           _productHash,
+            ipfsImageHash:         _ipfsImageHash,
+            mintedAt:              block.timestamp,
+            state:                 ProductState.MINTED,
+            exists:                true,
+            currentOwner:          msg.sender,
+            authorizedDistributor: _authorizedDistributor,
+            authorizedRetailer:    _authorizedRetailer
         });
 
         emit ProductMinted(
             _productId,
             _manufacturerId,
+            _productHash,
             _ipfsImageHash,
+            block.timestamp
+        );
+        emit CustodyAssigned(
+            _productId,
+            _authorizedDistributor,
+            _authorizedRetailer,
             block.timestamp
         );
     }
 
+    /**
+     * DISTRIBUTOR takes custody
+     * Fix #5 - only authorized distributor can move product
+     */
     function transferCustody(
         string memory _productId
     ) public onlyDistributor productExists(_productId) {
         require(
             products[_productId].state == ProductState.MINTED,
             "Product must be in MINTED state"
+        );
+        require(
+            products[_productId].authorizedDistributor
+                == msg.sender,
+            "Not authorized distributor for this product"
         );
 
         ProductState oldState = products[_productId].state;
@@ -250,16 +291,25 @@ contract ProductRegistry {
             _productId,
             oldState,
             ProductState.IN_TRANSIT,
+            msg.sender,
             block.timestamp
         );
     }
 
+    /**
+     * RETAILER receives product
+     * Fix #6 - only authorized retailer can receive product
+     */
     function receiveAtRetail(
         string memory _productId
     ) public onlyRetailer productExists(_productId) {
         require(
             products[_productId].state == ProductState.IN_TRANSIT,
             "Product must be IN_TRANSIT"
+        );
+        require(
+            products[_productId].authorizedRetailer == msg.sender,
+            "Not authorized retailer for this product"
         );
 
         ProductState oldState = products[_productId].state;
@@ -271,144 +321,119 @@ contract ProductRegistry {
             _productId,
             oldState,
             ProductState.RECEIVED_BY_RETAILER,
+            msg.sender,
             block.timestamp
         );
     }
 
-    function verifyAndPurchase(
+    /**
+     * BACKEND calls this on behalf of consumer
+     * Fix #7  - no MetaMask needed for consumer
+     * Fix #9  - removed telemetry data (city/lat/long)
+     * Fix #10 - removed velocity anomaly from Solidity
+     * Fix #4  - hash mismatch now changes state to FLAGGED
+     * Backend handles GPS, anomaly, AI off-chain
+     */
+    function verifyProduct(
         string memory _productId,
-        string memory _hashToCheck,
-        string memory _city,
-        int256 _latitude,
-        int256 _longitude
+        string memory _hashToCheck
     ) public productExists(_productId) returns (
         bool genuine,
         bool alreadySold,
-        bool flagged
+        bool flagged,
+        ProductState currentState
     ) {
         Product storage p = products[_productId];
 
+        // Increment scan count
+        scanCount[_productId]++;
+
         // Already flagged
         if (p.state == ProductState.FLAGGED_COUNTERFEIT) {
-            _logScan(_productId, _city, _latitude, _longitude);
-            return (false, false, true);
+            emit ProductVerified(_productId, false, block.timestamp);
+            return (false, false, true, p.state);
         }
 
-        // Already sold - check for velocity anomaly
+        // Already sold
         if (p.state == ProductState.SOLD) {
-
-            // Check velocity BEFORE logging new scan
-            bool anomaly = _isVelocityAnomaly(_productId, _city);
-
-            // Log the scan
-            _logScan(_productId, _city, _latitude, _longitude);
-
-            if (anomaly) {
-                p.state = ProductState.FLAGGED_COUNTERFEIT;
-                emit ProductFlagged(
-                    _productId,
-                    "Velocity anomaly: scanned in multiple cities",
-                    block.timestamp
-                );
-                return (false, true, true);
-            }
-
-            return (false, true, false);
+            emit ProductVerified(_productId, false, block.timestamp);
+            return (false, true, false, p.state);
         }
 
-        // Check hash matches
+        // Check hash - Fix #4
         bool hashMatch = keccak256(
             abi.encodePacked(p.productHash)
         ) == keccak256(abi.encodePacked(_hashToCheck));
 
         if (!hashMatch) {
+            // Fix #4 - change state to FLAGGED on hash mismatch
+            ProductState oldState = p.state;
+            p.state = ProductState.FLAGGED_COUNTERFEIT;
             emit ProductFlagged(
                 _productId,
-                "Hash mismatch detected",
+                "Hash mismatch: possible tampered product",
                 block.timestamp
             );
-            return (false, false, false);
+            emit StateUpdated(
+                _productId,
+                oldState,
+                ProductState.FLAGGED_COUNTERFEIT,
+                msg.sender,
+                block.timestamp
+            );
+            emit ProductVerified(_productId, false, block.timestamp);
+            return (false, false, true, p.state);
         }
 
         // All good - mark as SOLD
-        ProductState oldState = p.state;
+        ProductState prevState = p.state;
         p.state = ProductState.SOLD;
-
-        _logScan(_productId, _city, _latitude, _longitude);
 
         emit StateUpdated(
             _productId,
-            oldState,
+            prevState,
             ProductState.SOLD,
+            msg.sender,
             block.timestamp
         );
+        emit ProductVerified(_productId, true, block.timestamp);
 
-        return (true, false, false);
+        return (true, false, false, p.state);
     }
 
+    /**
+     * ADMIN or BACKEND flags counterfeit
+     * Fix #11 - state permanently FLAGGED
+     * Backend calls this when AI or anomaly detected
+     */
     function flagCounterfeit(
         string memory _productId,
         string memory _reason
     ) public onlyAdmin productExists(_productId) {
+        // Fix #11 - cannot unflag once flagged
+        require(
+            products[_productId].state !=
+                ProductState.FLAGGED_COUNTERFEIT,
+            "Already flagged"
+        );
+
+        ProductState oldState = products[_productId].state;
         products[_productId].state =
             ProductState.FLAGGED_COUNTERFEIT;
+
+        emit StateUpdated(
+            _productId,
+            oldState,
+            ProductState.FLAGGED_COUNTERFEIT,
+            msg.sender,
+            block.timestamp
+        );
         emit ProductFlagged(_productId, _reason, block.timestamp);
     }
 
-    // ══════════════════════════════════════════════════════
-    // INTERNAL HELPERS
-    // ══════════════════════════════════════════════════════
-
-    function _logScan(
-        string memory _productId,
-        string memory _city,
-        int256 _latitude,
-        int256 _longitude
-    ) internal {
-        scanHistory[_productId].push(ScanLog({
-            productId: _productId,
-            city:      _city,
-            country:   "",
-            latitude:  _latitude,
-            longitude: _longitude,
-            timestamp: block.timestamp,
-            scanner:   msg.sender
-        }));
-
-        lastScanTime[_productId] = block.timestamp;
-        lastScanCity[_productId] = _city;
-
-        emit ScanLogged(
-            _productId,
-            _city,
-            _latitude,
-            _longitude,
-            block.timestamp
-        );
-    }
-
-    function _isVelocityAnomaly(
-        string memory _productId,
-        string memory _currentCity
-    ) internal view returns (bool) {
-        // No previous scan = no anomaly
-        if (lastScanTime[_productId] == 0) return false;
-
-        // Different city?
-        bool differentCity = keccak256(
-            abi.encodePacked(lastScanCity[_productId])
-        ) != keccak256(abi.encodePacked(_currentCity));
-
-        // Within 5 minutes?
-        bool within5Minutes =
-            (block.timestamp - lastScanTime[_productId]) < 300;
-
-        return differentCity && within5Minutes;
-    }
-
-    // ══════════════════════════════════════════════════════
-    // VIEW FUNCTIONS
-    // ══════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════
+    // VIEW FUNCTIONS (Fix #16)
+    // ═════════════════════════════════════════════════════
 
     function getProduct(
         string memory _productId
@@ -419,7 +444,9 @@ contract ProductRegistry {
         string memory ipfsImageHash,
         uint256 mintedAt,
         ProductState state,
-        address currentOwner
+        address currentOwner,
+        address authorizedDistributor,
+        address authorizedRetailer
     ) {
         Product memory p = products[_productId];
         return (
@@ -429,7 +456,9 @@ contract ProductRegistry {
             p.ipfsImageHash,
             p.mintedAt,
             p.state,
-            p.currentOwner
+            p.currentOwner,
+            p.authorizedDistributor,
+            p.authorizedRetailer
         );
     }
 
@@ -443,24 +472,14 @@ contract ProductRegistry {
     function getScanCount(
         string memory _productId
     ) public view returns (uint256) {
-        return scanHistory[_productId].length;
+        return scanCount[_productId];
     }
 
-    function getScanLog(
-        string memory _productId,
-        uint256 index
-    ) public view returns (
-        string memory city,
-        int256 latitude,
-        int256 longitude,
-        uint256 timestamp
-    ) {
-        ScanLog memory log = scanHistory[_productId][index];
-        return (
-            log.city,
-            log.latitude,
-            log.longitude,
-            log.timestamp
-        );
+    function isProductFlagged(
+        string memory _productId
+    ) public view productExists(_productId)
+    returns (bool) {
+        return products[_productId].state ==
+            ProductState.FLAGGED_COUNTERFEIT;
     }
 }

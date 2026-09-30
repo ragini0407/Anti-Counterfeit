@@ -10,12 +10,19 @@ module.exports = {
     localhost: {
       url: "http://127.0.0.1:8545",
     },
+    amoy: {
+      url: process.env.AMOY_RPC_URL ||
+           "https://polygon-amoy-bor-rpc.publicnode.com",
+      chainId: 80002,
+      accounts: [process.env.DEPLOYER_PRIVATE_KEY],
+      timeout: 120000,
+    },
     sepolia: {
-  url: process.env.SEPOLIA_RPC_URL ||
-       "https://ethereum-sepolia-rpc.publicnode.com",
-  chainId: 11155111,
-  accounts: [process.env.DEPLOYER_PRIVATE_KEY],
-  timeout: 120000,
-},
+      url: process.env.SEPOLIA_RPC_URL ||
+           "https://ethereum-sepolia-rpc.publicnode.com",
+      chainId: 11155111,
+      accounts: [process.env.DEPLOYER_PRIVATE_KEY],
+      timeout: 120000,
+    },
   },
 };
