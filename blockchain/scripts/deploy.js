@@ -1,15 +1,19 @@
-const { ethers } = require("hardhat");
+const { ethers, network } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
 async function main() {
   const [deployer] = await ethers.getSigners();
+  const networkName = network.name;
+  const chainId = network.config.chainId;
 
   console.log("Deploying ProductRegistry...");
+  console.log("Network:", networkName);
+  console.log("Chain ID:", chainId);
   console.log("Deploying with account:", deployer.address);
 
   const balance = await ethers.provider.getBalance(deployer.address);
-  console.log("Balance:", ethers.formatEther(balance), "MATIC\n");
+  console.log("Balance:", ethers.formatEther(balance), "\n");
 
   const ProductRegistry = await ethers.getContractFactory("ProductRegistry");
   const contract = await ProductRegistry.deploy();
@@ -17,17 +21,27 @@ async function main() {
 
   const address = await contract.getAddress();
 
+  // Set explorer based on network
+  let explorer = "";
+  if (chainId === 80002) {
+    explorer = `https://amoy.polygonscan.com/address/${address}`;
+  } else if (chainId === 11155111) {
+    explorer = `https://sepolia.etherscan.io/address/${address}`;
+  } else {
+    explorer = `http://localhost/${address}`;
+  }
+
   console.log("✅ ProductRegistry deployed!");
   console.log("Contract Address:", address);
-  console.log(`Explorer: https://amoy.polygonscan.com/address/${address}\n`);
+  console.log("Explorer:", explorer);
 
   // Save deployment info
   const deployInfo = {
     contractAddress: address,
     deployer:        deployer.address,
-    network:         "Polygon Amoy Testnet",
-    chainId:         80002,
-    explorer:        `https://amoy.polygonscan.com/address/${address}`,
+    network:         networkName,
+    chainId:         chainId,
+    explorer:        explorer,
     deployedAt:      new Date().toISOString(),
     abi:             JSON.parse(contract.interface.formatJson()),
   };
@@ -40,10 +54,15 @@ async function main() {
     JSON.stringify(deployInfo, null, 2)
   );
 
-  console.log("--- Copy to backend .env ---");
+  console.log("\n--- Copy to backend .env ---");
   console.log(`CONTRACT_ADDRESS=${address}`);
-  console.log(`BLOCKCHAIN_RPC_URL=https://rpc-amoy.polygon.technology`);
-  console.log(`CHAIN_ID=80002`);
+  if (chainId === 80002) {
+    console.log(`BLOCKCHAIN_RPC_URL=https://rpc-amoy.polygon.technology`);
+    console.log(`CHAIN_ID=80002`);
+  } else if (chainId === 11155111) {
+    console.log(`BLOCKCHAIN_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com`);
+    console.log(`CHAIN_ID=11155111`);
+  }
   console.log("----------------------------");
 }
 
