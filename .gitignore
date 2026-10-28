@@ -22,3 +22,10 @@ backend/testVision.js
 # Hardhat generated files
 blockchain/artifacts/
 blockchain/cache/
+# Python generated files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+# Frontend production build
+frontend/dist/

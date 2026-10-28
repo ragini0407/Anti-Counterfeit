@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Manufacturer = require("../models/Manufacturer");
+const SupplyChainPartner = require("../models/SupplyChainPartner");
 
 const registerManufacturer = async (req, res) => {
     try {
@@ -75,6 +76,161 @@ const registerManufacturer = async (req, res) => {
         });
     }
 };
+
+
+// Register Distributor
+const registerDistributor = async (req, res) => {
+    try {
+        const {
+            name,
+            email,
+            password,
+            companyName,
+            registrationNumber,
+            address,
+            contactNumber
+        } = req.body;
+
+        // Check required fields
+        if (
+            !name ||
+            !email ||
+            !password ||
+            !companyName ||
+            !registrationNumber ||
+            !address ||
+            !contactNumber
+        ) {
+            return res.status(400).json({
+                message: "All required fields must be provided"
+            });
+        }
+
+        // Check if email already exists
+        const existingUser = await User.findOne({ email });
+
+        if (existingUser) {
+            return res.status(400).json({
+                message: "Email is already registered"
+            });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create distributor user
+        const user = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+            role: "DISTRIBUTOR",
+            status: "PENDING"
+        });
+
+        // Create distributor profile
+        const distributor = await SupplyChainPartner.create({
+            userId: user._id,
+            partnerType: "DISTRIBUTOR",
+            companyName,
+            registrationNumber,
+            address,
+            contactNumber,
+            verificationStatus: "PENDING"
+        });
+
+        res.status(201).json({
+            message: "Distributor registration submitted successfully",
+            distributorId: distributor._id,
+            status: "PENDING"
+        });
+
+    } catch (error) {
+        console.error("Distributor registration error:", error);
+
+        res.status(500).json({
+            message: "Server error during distributor registration"
+        });
+    }
+};
+
+
+// Register Retailer
+const registerRetailer = async (req, res) => {
+    try {
+        const {
+            name,
+            email,
+            password,
+            companyName,
+            registrationNumber,
+            address,
+            contactNumber
+        } = req.body;
+
+        // Check required fields
+        if (
+            !name ||
+            !email ||
+            !password ||
+            !companyName ||
+            !registrationNumber ||
+            !address ||
+            !contactNumber
+        ) {
+            return res.status(400).json({
+                message: "All required fields must be provided"
+            });
+        }
+
+        // Check if email already exists
+        const existingUser = await User.findOne({ email });
+
+        if (existingUser) {
+            return res.status(400).json({
+                message: "Email is already registered"
+            });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create retailer user
+        const user = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+            role: "RETAILER",
+            status: "PENDING"
+        });
+
+        // Create retailer profile
+        const retailer = await SupplyChainPartner.create({
+            userId: user._id,
+            partnerType: "RETAILER",
+            companyName,
+            registrationNumber,
+            address,
+            contactNumber,
+            verificationStatus: "PENDING"
+        });
+
+        res.status(201).json({
+            message: "Retailer registration submitted successfully",
+            retailerId: retailer._id,
+            status: "PENDING"
+        });
+
+    } catch (error) {
+        console.error("Retailer registration error:", error);
+
+        res.status(500).json({
+            message: "Server error during retailer registration"
+        });
+    }
+};
+
+
+// Login
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -134,7 +290,9 @@ const loginUser = async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                status: user.status
+                status: user.status,
+                walletAddress: user.walletAddress || null,
+                walletVerifiedAt: user.walletVerifiedAt || null
             }
         });
 
@@ -146,7 +304,11 @@ const loginUser = async (req, res) => {
         });
     }
 };
+
+
 module.exports = {
     registerManufacturer,
+    registerDistributor,
+    registerRetailer,
     loginUser
 };

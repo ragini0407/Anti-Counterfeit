@@ -6,9 +6,11 @@ import Signup from "./Signup";
 import AdminDashboard from "./AdminDashboard";
 import ManufacturerDashboard from "./ManufacturerDashboard";
 import ConsumerDashboard from "./ConsumerDashboard";
+import SupplyChainPartnerDashboard from "./SupplyChainPartnerDashboard";
 
 import Scanner from "./Scanner";
 import ConsumerScanner from "./ConsumerScanner";
+import { clearUserSession } from "./session";
 
 import "./App.css";
 
@@ -43,6 +45,11 @@ function App() {
     setPage("home");
   };
 
+  const logoutToHome = () => {
+    clearUserSession();
+    setPage("home");
+  };
+
   // =========================
   // LOGIN → ADMIN
   // =========================
@@ -62,6 +69,10 @@ function App() {
   // =========================
   const openConsumer = () => {
     setPage("consumer");
+  };
+
+  const openPartner = () => {
+    setPage("partner");
   };
 
   // ==================================================
@@ -124,6 +135,7 @@ function App() {
         // CONSUMER
         onConsumerLogin={openConsumer}
         onConsumer={openConsumer}
+        onPartner={openPartner}
       />
     );
   }
@@ -146,7 +158,7 @@ function App() {
   if (page === "admin") {
     return (
       <AdminDashboard
-        onLogout={openHome}
+        onLogout={logoutToHome}
       />
     );
   }
@@ -157,7 +169,7 @@ function App() {
   if (page === "manufacturer") {
     return (
       <ManufacturerDashboard
-        onLogout={openHome}
+        onLogout={logoutToHome}
         onScanner={openManufacturerScanner}
       />
     );
@@ -169,10 +181,14 @@ function App() {
   if (page === "consumer") {
     return (
       <ConsumerDashboard
-        onLogout={openHome}
+        onLogout={logoutToHome}
         onScanner={openConsumerScanner}
       />
     );
+  }
+
+  if (page === "partner") {
+    return <SupplyChainPartnerDashboard onLogout={logoutToHome} />;
   }
 
   // ==================================================

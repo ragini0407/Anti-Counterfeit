@@ -1,53 +1,17 @@
 # Blockchain Integration Guide
-## For Backend Developer (Team Member 1)
+## Legacy V1 deployment: Polygon Amoy (chain 80002)
 
-## Network
-- RPC URL: http://127.0.0.1:8545
-- Chain ID: 31337
-- Start node: npx hardhat node (keep running)
+This legacy V1 deployment is not the registry currently configured for backend reads. The backend's last verified configuration used Ethereum Sepolia (chain 11155111) and V1 address `0xa3d897002aAFec974D1AF13039756CaC19c41ECD`. ProductRegistry V2 is a separate, not-yet-deployed contract. See [ProductRegistry V2](./PRODUCT_REGISTRY_V2.md) for its lifecycle, compatibility, tests, and approval-gated deployment checklist.
 
-## Contract
-- Name: ProductRegistry
-- Address: 0x... (paste deployed address here)
-- ABI location: blockchain/artifacts/contracts/ProductRegistry.sol/ProductRegistry.json
+## Contract Details
+- Address: 0x96BfBfDEEa222449675C1320355550C18c89dDa5
+- Explorer: https://amoy.polygonscan.com/address/0x96BfBfDEEa222449675C1320355550C18c89dDa5
+- Network: Polygon Amoy
+- Chain ID: 80002
+- RPC URL: https://rpc-amoy.polygon.technology
 
-## Contract Functions
-
-### 1. approveManufacturer(address)
-Admin approves a manufacturer wallet address before they can register products.
-
-### 2. registerProduct(productId, manufacturer, productHash, timestamp)
-Only approved manufacturers can call this.
-- productId: string e.g. "PROD-2026-ABC"
-- manufacturer: string e.g. "MFR-0001"
-- productHash: SHA256 hash of product data
-- timestamp: Math.floor(Date.now() / 1000)
-
-### 3. getProduct(productId)
-Returns full product details.
-Returns: (productId, manufacturer, productHash, timestamp, exists, isFlagged)
-
-### 4. verifyProduct(productId, hashToCheck)
-Returns: (exists, hashMatches)
-
-### 5. flagProduct(productId)
-Admin flags a counterfeit product.
-
-## backend .env variables required
-BLOCKCHAIN_RPC_URL=http://127.0.0.1:8545
-CONTRACT_ADDRESS=0x... (from deploy output)
-DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-
-## ethers.js v6 example
-const { ethers } = require('ethers');
-const artifact = require('./artifacts/contracts/ProductRegistry.sol/ProductRegistry.json');
-
-const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545');
-const signer = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, provider);
-const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, artifact.abi, signer);
-
-// Register product
-await contract.registerProduct(productId, manufacturerId, productHash, timestamp);
-
-// Verify product
-const [exists, hashMatches] = await contract.verifyProduct(productId, hash);
+## Legacy V1 environment example (Polygon Amoy only; not backend active configuration)
+CONTRACT_ADDRESS=0x96BfBfDEEa222449675C1320355550C18c89dDa5
+BLOCKCHAIN_RPC_URL=https://rpc-amoy.polygon.technology
+CHAIN_ID=80002
+# Do not store or commit private keys; use a secure local secret manager.

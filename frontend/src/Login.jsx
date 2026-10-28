@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { apiUrl } from "./api";
 import "./Login.css";
 
 function Login({
@@ -6,6 +7,7 @@ function Login({
   onHome,
   onAdminLogin,
   onManufacturerLogin,
+  onPartner,
   onAdmin,
   onManufacturer,
   onConsumer
@@ -28,7 +30,7 @@ function Login({
       setLoading(true);
 
       const response = await fetch(
-        "http://localhost:5000/api/auth/login",
+        apiUrl("/auth/login"),
         {
           method: "POST",
           headers: {
@@ -106,6 +108,11 @@ function Login({
           onConsumer();
         }
 
+        return;
+      }
+
+      if (backendRole === "DISTRIBUTOR" || backendRole === "RETAILER") {
+        onPartner?.();
         return;
       }
 
@@ -300,6 +307,10 @@ function Login({
                 <option value="manufacturer">
                   Manufacturer
                 </option>
+
+                <option value="distributor">Distributor</option>
+
+                <option value="retailer">Retailer</option>
 
                 <option value="admin">
                   Admin

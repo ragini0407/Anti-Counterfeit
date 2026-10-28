@@ -103,6 +103,53 @@
   font-size: 15px;
 }
 
+.consumer-location-consent {
+  display: grid;
+  gap: 10px;
+  max-width: 680px;
+  margin: 0 auto 24px;
+  padding: 14px 16px;
+  border: 1px solid #cddcf0;
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #173252;
+  text-align: left;
+}
+
+.consumer-location-consent legend {
+  padding: 0 5px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.consumer-location-consent p {
+  margin: 0 0 2px;
+  color: #62758c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.consumer-location-consent label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 28px;
+  cursor: pointer;
+}
+
+.consumer-location-consent input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  accent-color: #11845b;
+}
+
+.consumer-location-consent label span {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 /* =========================================================
    CAMERA AREA
 ========================================================= */
@@ -438,12 +485,65 @@
   font-size: 14px;
 }
 
+.consumer-manual-lookup {
+  margin: 20px auto 24px;
+  max-width: 520px;
+  padding: 18px;
+  border: 1px solid #dce7f7;
+  border-radius: 12px;
+  background: #f8faff;
+  text-align: left;
+}
+
+.consumer-manual-lookup > label {
+  display: block;
+  margin-bottom: 8px;
+  color: #071b52;
+  font-weight: 700;
+}
+
+.consumer-manual-lookup-controls,
+.consumer-image-actions {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.consumer-manual-lookup-controls input {
+  flex: 1 1 200px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #cbd8ec;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.consumer-manual-lookup-controls input:focus-visible,
+.consumer-manual-lookup-controls button:focus-visible,
+.consumer-image-actions label:focus-within,
+.consumer-upload-submit:focus-visible {
+  outline: 3px solid #15803d;
+  outline-offset: 2px;
+}
+
+.consumer-manual-lookup > p {
+  margin: 10px 0 0;
+  color: #64769a;
+  font-size: 13px;
+}
+
 /* =========================================================
    UPLOAD
 ========================================================= */
 
 .consumer-upload-button {
-  display: inline-block;
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
   background: #1265e8;
   color: white;
   padding: 11px 20px;
@@ -458,7 +558,24 @@
 }
 
 .consumer-upload-button input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.consumer-upload-submit {
+  border: 0;
+  font: inherit;
+}
+
+.consumer-image-error {
+  margin: 10px 0;
+  color: #b42318 !important;
+  font-weight: 600;
 }
 
 /* =========================================================
@@ -479,6 +596,17 @@
 .consumer-image-preview p {
   margin-top: 8px;
   color: #0ca04d;
+}
+
+.consumer-image-preview img {
+  display: block;
+  width: min(100%, 360px);
+  max-height: 280px;
+  object-fit: contain;
+}
+
+.consumer-image-preview .consumer-upload-submit {
+  margin-top: 4px;
 }
 
 /* =========================================================
@@ -605,6 +733,22 @@
   }
 
   .consumer-feature {
+    flex-direction: column;
+  }
+
+  .consumer-manual-lookup-controls {
+    flex-direction: column;
+  }
+
+  .consumer-manual-lookup-controls input,
+  .consumer-manual-lookup-controls button,
+  .consumer-image-actions,
+  .consumer-image-actions .consumer-upload-button,
+  .consumer-image-preview .consumer-upload-submit {
+    width: 100%;
+  }
+
+  .consumer-image-actions {
     flex-direction: column;
   }
 

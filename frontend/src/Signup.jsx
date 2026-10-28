@@ -1,443 +1,217 @@
 import React, { useState } from "react";
+import { apiUrl } from "./api";
 import "./Auth.css";
+
+const REGISTRATION_ENDPOINTS = {
+  manufacturer: "register-manufacturer",
+  distributor: "register-distributor",
+  retailer: "register-retailer"
+};
 
 function Signup({ onLogin, onHome }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  // =========================
-  // FORM STATES
-  // =========================
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("");
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: "",
+    companyName: "",
+    registrationNumber: "",
+    address: "",
+    contactNumber: ""
+  });
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("error");
 
-  // =========================
-  // CREATE ACCOUNT
-  // =========================
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const update = (field) => (event) => {
+    setForm((current) => ({ ...current, [field]: event.target.value }));
+  };
 
-    // Check all fields
-    if (
-      !fullName ||
-      !email ||
-      !password ||
-      !confirmPassword ||
-      !role
-    ) {
-      alert("Please fill in all fields.");
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setMessage("");
+    setMessageType("error");
+
+    if (!REGISTRATION_ENDPOINTS[form.role]) {
+      setMessage("Select manufacturer, distributor, or retailer.");
       return;
     }
-
-    // Check password
-    if (password !== confirmPassword) {
-      alert("Passwords do not match.");
+    if (form.password !== form.confirmPassword) {
+      setMessage("Passwords do not match.");
       return;
     }
-
-    // Check terms
     if (!termsAccepted) {
-      alert("Please accept the Terms of Service and Privacy Policy.");
+      setMessage("Please accept the Terms of Service and Privacy Policy.");
       return;
     }
 
-    // =========================
-    // SUCCESS
-    // =========================
-    alert(
-      `Account created successfully!\n\nName: ${fullName}\nRole: ${role}`
-    );
+    setLoading(true);
+    try {
+      const response = await fetch(
+        apiUrl(`/auth/${REGISTRATION_ENDPOINTS[form.role]}`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name.trim(),
+            email: form.email.trim(),
+            password: form.password,
+            companyName: form.companyName.trim(),
+            registrationNumber: form.registrationNumber.trim(),
+            address: form.address.trim(),
+            contactNumber: form.contactNumber.trim()
+          })
+        }
+      );
 
-    // After signup go to Login
-    if (onLogin) {
-      onLogin();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (data.message === "Email is already registered") {
+          setMessage("This email is already registered. Try logging in.");
+        } else {
+          setMessage(data.message || "Registration failed. Please try again.");
+        }
+        return;
+      }
+
+      setMessage(
+        "Registration submitted. Your account and profile are pending admin approval. Wallet binding and on-chain role approval are separate steps."
+      );
+      setMessageType("success");
+    } catch {
+      setMessage("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  const textField = (label, field, placeholder, type = "text", autoComplete) => (
+    <div className="form-group" key={field}>
+      <label htmlFor={`signup-${field}`}>{label}</label>
+      <div className="input-box">
+        <input
+          id={`signup-${field}`}
+          type={type}
+          placeholder={placeholder}
+          value={form[field]}
+          onChange={update(field)}
+          autoComplete={autoComplete}
+          disabled={loading}
+          required
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="auth-page">
-
       <div className="auth-card signup-card">
-
-        {/* =========================
-            LOGO
-        ========================= */}
         <div className="auth-logo-section">
-
-          <img
-            src="/logo.png"
-            alt="Anti-Counterfeit Logo"
-            className="auth-logo"
-          />
-
-          <h1>
-            Anti-<span>Counterfeit</span>
-          </h1>
-
-          <p>
-            AI-Powered Blockchain Product Verification
-          </p>
-
+          <img src="/logo.png" alt="Anti-Counterfeit Logo" className="auth-logo" />
+          <h1>Anti-<span>Counterfeit</span></h1>
+          <p>AI-Powered Blockchain Product Verification</p>
         </div>
 
-
-        {/* =========================
-            HEADING
-        ========================= */}
         <div className="auth-heading">
-
           <h2>Create Account</h2>
-
-          <p>
-            Join us and start verifying with confidence
-          </p>
-
+          <p>Join us and start verifying with confidence</p>
         </div>
 
-
-        {/* =========================
-            SIGNUP FORM
-        ========================= */}
         <form onSubmit={handleSubmit}>
-
-          {/* =========================
-              FULL NAME
-          ========================= */}
+          {textField("Full Name", "name", "Enter your full name", "text", "name")}
+          {textField("Email Address", "email", "Enter your email", "email", "email")}
           <div className="form-group">
-
-            <label>Full Name</label>
-
+            <label htmlFor="signup-password">Password</label>
             <div className="input-box">
-
-              <span className="input-icon">
-                ♙
-              </span>
-
-              <input
-                type="text"
-                placeholder="Enter your full name"
-                value={fullName}
-                onChange={(e) =>
-                  setFullName(e.target.value)
-                }
-                required
-              />
-
-            </div>
-
-          </div>
-
-
-          {/* =========================
-              EMAIL
-          ========================= */}
-          <div className="form-group">
-
-            <label>Email Address</label>
-
-            <div className="input-box">
-
-              <span className="input-icon">
-                ✉
-              </span>
-
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) =>
-                  setEmail(e.target.value)
-                }
-                required
-              />
-
-            </div>
-
-          </div>
-
-
-          {/* =========================
-              PASSWORD
-          ========================= */}
-          <div className="form-group">
-
-            <label>Password</label>
-
-            <div className="input-box">
-
-              <span className="input-icon">
-                🔒
-              </span>
-
-              <input
-                type={
-                  showPassword
-                    ? "text"
-                    : "password"
-                }
-                placeholder="Create a password"
-                value={password}
-                onChange={(e) =>
-                  setPassword(e.target.value)
-                }
-                required
-              />
-
-              <button
-                type="button"
-                className="eye-button"
-                onClick={() =>
-                  setShowPassword(!showPassword)
-                }
-              >
+              <input id="signup-password" type={showPassword ? "text" : "password"} placeholder="Create a password" value={form.password} onChange={update("password")} autoComplete="new-password" disabled={loading} required />
+              <button type="button" className="eye-button" onClick={() => setShowPassword((shown) => !shown)} aria-label={showPassword ? "Hide password" : "Show password"}>
                 {showPassword ? "◉" : "◌"}
               </button>
-
             </div>
-
           </div>
-
-
-          {/* =========================
-              CONFIRM PASSWORD
-          ========================= */}
           <div className="form-group">
-
-            <label>Confirm Password</label>
-
+            <label htmlFor="signup-confirmPassword">Confirm Password</label>
             <div className="input-box">
-
-              <span className="input-icon">
-                🔒
-              </span>
-
-              <input
-                type={
-                  showConfirmPassword
-                    ? "text"
-                    : "password"
-                }
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(e) =>
-                  setConfirmPassword(e.target.value)
-                }
-                required
-              />
-
-              <button
-                type="button"
-                className="eye-button"
-                onClick={() =>
-                  setShowConfirmPassword(
-                    !showConfirmPassword
-                  )
-                }
-              >
+              <input id="signup-confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="Confirm your password" value={form.confirmPassword} onChange={update("confirmPassword")} autoComplete="new-password" disabled={loading} required />
+              <button type="button" className="eye-button" onClick={() => setShowConfirmPassword((shown) => !shown)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}>
                 {showConfirmPassword ? "◉" : "◌"}
               </button>
-
             </div>
-
           </div>
 
-
-          {/* =========================
-              REGISTER AS
-          ========================= */}
           <div className="form-group">
-
-            <label>Register As</label>
-
+            <label htmlFor="signup-role">Register As</label>
             <div className="input-box">
-
-              <span className="input-icon">
-                ♙
-              </span>
-
-              <select
-                value={role}
-                onChange={(e) =>
-                  setRole(e.target.value)
-                }
-                required
-              >
-
-                <option value="" disabled>
-                  Select your role
-                </option>
-
-                <option value="consumer">
-                  Consumer
-                </option>
-
-                <option value="manufacturer">
-                  Manufacturer
-                </option>
-
-                <option value="seller">
-                  Seller
-                </option>
-
-                <option value="admin">
-                  Admin
-                </option>
-
+              <select id="signup-role" value={form.role} onChange={update("role")} disabled={loading} required>
+                <option value="" disabled>Select your role</option>
+                <option value="manufacturer">Manufacturer</option>
+                <option value="distributor">Distributor</option>
+                <option value="retailer">Retailer</option>
               </select>
-
             </div>
-
           </div>
 
+          {textField("Company Name", "companyName", "Enter your registered company name", "text", "organization")}
+          {textField("Registration Number", "registrationNumber", "Enter your registration number", "text")}
+          {textField("Business Address", "address", "Enter your business address", "text", "street-address")}
+          {textField("Contact Number", "contactNumber", "Enter your contact number", "tel", "tel")}
 
-          {/* =========================
-              TERMS
-          ========================= */}
           <div className="terms">
-
             <input
               type="checkbox"
               id="terms"
               checked={termsAccepted}
-              onChange={(e) =>
-                setTermsAccepted(e.target.checked)
-              }
+              onChange={(event) => setTermsAccepted(event.target.checked)}
+              disabled={loading}
               required
             />
-
             <label htmlFor="terms">
-
-              I agree to{" "}
-
-              <button
-                type="button"
-                onClick={() =>
-                  alert("Terms of Service")
-                }
-              >
-                Terms of Service
-              </button>
-
-              {" "}and{" "}
-
-              <button
-                type="button"
-                onClick={() =>
-                  alert("Privacy Policy")
-                }
-              >
-                Privacy Policy
-              </button>
-
+              I agree to <button type="button" onClick={() => alert("Terms of Service")}>Terms of Service</button>
+              {" and "}
+              <button type="button" onClick={() => alert("Privacy Policy")}>Privacy Policy</button>
             </label>
-
           </div>
 
+          {message && (
+            <p
+              className={`signup-message ${messageType}`}
+              role={messageType === "error" ? "alert" : "status"}
+              style={{
+                color: messageType === "error" ? "#b42318" : "#157347",
+                background: messageType === "error" ? "#fff3f2" : "#eefaf3",
+                borderRadius: "6px",
+                padding: "10px 12px",
+                lineHeight: 1.45,
+                fontSize: "13px"
+              }}
+            >
+              {message}
+            </p>
+          )}
 
-          {/* =========================
-              CREATE ACCOUNT
-          ========================= */}
-          <button
-            type="submit"
-            className="auth-submit"
-          >
-
-            Create Account
-
-            <span>
-              →
-            </span>
-
+          <button type="submit" className="auth-submit" disabled={loading}>
+            {loading ? "Submitting..." : "Create Account"}
+            {!loading && <span>→</span>}
           </button>
-
         </form>
 
-
-        {/* =========================
-            LOGIN
-        ========================= */}
         <div className="switch-page">
-
-          <span>
-            Already have an account?
-          </span>
-
-          <button
-            type="button"
-            onClick={onLogin}
-          >
-            Login
-          </button>
-
+          <span>Already have an account?</span>
+          <button type="button" onClick={onLogin}>Login</button>
         </div>
-
-
-        {/* =========================
-            BACK HOME
-        ========================= */}
         <div className="back-home">
-
-          <button
-            type="button"
-            onClick={onHome}
-          >
-            ← Back to Home
-          </button>
-
+          <button type="button" onClick={onHome}>← Back to Home</button>
         </div>
-
-
-        {/* =========================
-            BOTTOM FEATURES
-        ========================= */}
         <div className="auth-features">
-
-          <div>
-
-            <span>
-              ♢
-            </span>
-
-            <p>
-              Secure
-            </p>
-
-          </div>
-
-
-          <div>
-
-            <span>
-              ♙
-            </span>
-
-            <p>
-              Transparent
-            </p>
-
-          </div>
-
-
-          <div>
-
-            <span>
-              ♢
-            </span>
-
-            <p>
-              Trustworthy
-            </p>
-
-          </div>
-
+          <div><span>♢</span><p>Secure</p></div>
+          <div><span>♙</span><p>Transparent</p></div>
+          <div><span>♢</span><p>Trustworthy</p></div>
         </div>
-
       </div>
-
     </div>
   );
 }

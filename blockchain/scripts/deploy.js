@@ -1,27 +1,55 @@
-const hre = require("hardhat");
+const { ethers } = require("hardhat");
+const fs = require("fs");
+const path = require("path");
 
 async function main() {
-  console.log("Deploying ProductRegistry...");
+  const [deployer] = await ethers.getSigners();
 
-  const [deployer] = await hre.ethers.getSigners();
+  console.log("Deploying ProductRegistry...");
   console.log("Deploying with account:", deployer.address);
 
-  const ProductRegistry = await hre.ethers.getContractFactory("ProductRegistry");
-  const registry = await ProductRegistry.deploy();
-  await registry.waitForDeployment();
+  const balance = await ethers.provider.getBalance(deployer.address);
+  console.log("Balance:", ethers.formatEther(balance), "MATIC\n");
 
-  const address = await registry.getAddress();
-  console.log("ProductRegistry deployed to:", address);
-  console.log("Network:", hre.network.name);
-  console.log("Admin address:", deployer.address);
+  const ProductRegistry = await ethers.getContractFactory("ProductRegistry");
+  const contract = await ProductRegistry.deploy();
+  await contract.waitForDeployment();
 
-  console.log("\n--- Save this info for the backend developer ---");
-  console.log("CONTRACT_ADDRESS=" + address);
-  console.log("NETWORK=" + hre.network.name);
-  console.log("--------------------------------------------------");
+  const address = await contract.getAddress();
+
+  console.log("✅ ProductRegistry deployed!");
+  console.log("Contract Address:", address);
+  console.log(`Explorer: https://amoy.polygonscan.com/address/${address}\n`);
+
+  // Save deployment info
+  const deployInfo = {
+    contractAddress: address,
+    deployer:        deployer.address,
+    network:         "Polygon Amoy Testnet",
+    chainId:         80002,
+    explorer:        `https://amoy.polygonscan.com/address/${address}`,
+    deployedAt:      new Date().toISOString(),
+    abi:             JSON.parse(contract.interface.formatJson()),
+  };
+
+  const dir = path.join(__dirname, "../artifacts");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(dir, "ProductRegistry.json"),
+    JSON.stringify(deployInfo, null, 2)
+  );
+
+  console.log("--- Copy to backend .env ---");
+  console.log(`CONTRACT_ADDRESS=${address}`);
+  console.log(`BLOCKCHAIN_RPC_URL=https://rpc-amoy.polygon.technology`);
+  console.log(`CHAIN_ID=80002`);
+  console.log("----------------------------");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

@@ -2,10 +2,15 @@ const express = require("express");
 const router = express.Router();
 
 const {
-    registerProduct,
+    prepareProductRegistration,
+    confirmProductRegistration,
+    getPendingProductRegistrations,
+    claimProductRegistrationMint,
     verifyProductByQR,
+    verifyProductByCode,
     verifyProductImage,
     getMyProducts,
+    getApprovedPartners,
     deleteProduct,
     getConsumerStats
 } = require("../controllers/productController");
@@ -16,13 +21,41 @@ const {
 } = require("../middleware/authMiddleware");
 
 const upload = require("../middleware/uploadMiddleware");
+const {
+    getAssignedProducts,
+    prepareLifecycleAction,
+    claimLifecycleSubmission,
+    releaseLifecycleSubmission,
+    confirmLifecycleAction
+} = require("../controllers/lifecycleController");
 
 router.post(
-    "/",
+    "/prepare",
     protect,
     authorizeRoles("MANUFACTURER"),
     upload.single("referenceImage"),
-    registerProduct
+    prepareProductRegistration
+);
+
+router.post(
+    "/confirm",
+    protect,
+    authorizeRoles("MANUFACTURER"),
+    confirmProductRegistration
+);
+
+router.get(
+    "/registrations/pending",
+    protect,
+    authorizeRoles("MANUFACTURER"),
+    getPendingProductRegistrations
+);
+
+router.post(
+    "/registrations/:registrationId/claim-mint",
+    protect,
+    authorizeRoles("MANUFACTURER"),
+    claimProductRegistrationMint
 );
 
 router.post(
@@ -31,8 +64,13 @@ router.post(
 );
 
 router.post(
+    "/verify-code/:productCode",
+    verifyProductByCode
+);
+
+router.post(
     "/verify-image/:productCode",
-    upload.single("productImage"),
+    upload.singleImage("productImage"),
     verifyProductImage
 );
 
@@ -43,7 +81,44 @@ router.get(
     getMyProducts
 );
 router.get(
+    "/partners",
+    protect,
+    authorizeRoles("MANUFACTURER"),
+    getApprovedPartners
+);
+router.get(
+    "/lifecycle",
+    protect,
+    authorizeRoles("MANUFACTURER", "DISTRIBUTOR", "RETAILER"),
+    getAssignedProducts
+);
+router.post(
+    "/:productCode/lifecycle/prepare",
+    protect,
+    authorizeRoles("MANUFACTURER", "DISTRIBUTOR", "RETAILER"),
+    prepareLifecycleAction
+);
+router.post(
+    "/lifecycle/operations/:operationId/claim",
+    protect,
+    authorizeRoles("MANUFACTURER", "DISTRIBUTOR", "RETAILER"),
+    claimLifecycleSubmission
+);
+router.post(
+    "/lifecycle/operations/:operationId/release",
+    protect,
+    authorizeRoles("MANUFACTURER", "DISTRIBUTOR", "RETAILER"),
+    releaseLifecycleSubmission
+);
+router.post(
+    "/lifecycle/operations/:operationId/confirm",
+    protect,
+    authorizeRoles("MANUFACTURER", "DISTRIBUTOR", "RETAILER"),
+    confirmLifecycleAction
+);
+router.get(
     "/consumer-stats",
+    protect,
     getConsumerStats
 )
 router.delete(
@@ -52,6 +127,6 @@ router.delete(
     authorizeRoles("MANUFACTURER"),
     deleteProduct
 );
-;
+
 
 module.exports = router;

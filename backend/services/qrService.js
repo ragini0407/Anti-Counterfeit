@@ -2,7 +2,15 @@ const QRCode = require("qrcode");
 const path = require("path");
 const fs = require("fs");
 
-const generateProductQR = async (productCode) => {
+const generateProductQR = async (product) => {
+    const payload = {
+        productCode: product.productCode,
+        productName: product.productName,
+        brandName: product.brandName,
+        category: product.category,
+        productHash: product.productHash
+    };
+
     const qrDirectory = path.join(
         process.cwd(),
         "uploads",
@@ -14,20 +22,16 @@ const generateProductQR = async (productCode) => {
         fs.mkdirSync(qrDirectory, { recursive: true });
     }
 
-    const fileName = `${productCode}.png`;
+    const fileName = `${product.productCode}.png`;
 
     const filePath = path.join(
         qrDirectory,
         fileName
     );
 
-    // For now, QR points to our backend verification endpoint
-    const verificationUrl =
-        `http://localhost:5000/api/products/verify/${productCode}`;
-
     await QRCode.toFile(
         filePath,
-        verificationUrl,
+        JSON.stringify(payload),
         {
             width: 500,
             margin: 2

@@ -5,6 +5,9 @@ import React, {
 } from "react";
 
 import { Html5Qrcode } from "html5-qrcode";
+import WalletBinding from "./WalletBinding";
+import { apiUrl } from "./api";
+import LifecycleWorkflow from "./LifecycleWorkflow";
 
 import "./ManufacturerDashboard.css";
 
@@ -22,6 +25,42 @@ function ManufacturerDashboard({ onLogout }) {
   // =====================================================
 
   const [products, setProducts] = useState([]);
+  const [productsLoaded, setProductsLoaded] = useState(false);
+  const sumProductMetric = (field) => {
+    if (!productsLoaded) return null;
+    if (products.length === 0) return 0;
+    if (products.some((product) => !Number.isFinite(product[field]))) return null;
+    return products.reduce((sum, product) => sum + product[field], 0);
+  };
+  const displayMetric = (value) => Number.isFinite(value) ? value.toLocaleString() : "—";
+  const [distributors, setDistributors] = useState([]);
+  const [retailers, setRetailers] = useState([]);
+  const [partnerLoadErrors, setPartnerLoadErrors] = useState({});
+  const [selectedDistributor, setSelectedDistributor] = useState("");
+  const [selectedRetailer, setSelectedRetailer] = useState("");
+  const [pendingRegistration, setPendingRegistration] = useState(null);
+  const [pendingTransactionHash, setPendingTransactionHash] = useState("");
+  const [registrationBusy, setRegistrationBusy] = useState(false);
+  const rememberPendingRegistration = (pending) => {
+    setPendingRegistration(pending);
+    let user = {};
+    try {
+      user = JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      user = {};
+    }
+    if (!user.id) return;
+    const storageKey = `pendingProductRegistration:${user.id}`;
+    if (pending) {
+      sessionStorage.setItem(storageKey, JSON.stringify({
+        registrationId: pending.registrationId,
+        transactionHash: pending.transactionHash || null
+      }));
+    } else {
+      sessionStorage.removeItem(storageKey);
+      setPendingTransactionHash("");
+    }
+  };
   const [loadingProducts, setLoadingProducts] = useState(true); 
   const fetchMyProducts = async () => {
   try {
@@ -35,7 +74,7 @@ function ManufacturerDashboard({ onLogout }) {
     }
 
     const response = await fetch(
-      "http://localhost:5000/api/products/my-products",
+      apiUrl("/products/my-products"),
       {
         method: "GET",
         headers: {
@@ -53,6 +92,7 @@ function ManufacturerDashboard({ onLogout }) {
     }
 
     setProducts(data.products || []);
+    setProductsLoaded(true);
   } catch (error) {
     console.error("Fetch products error:", error);
     alert(error.message);
@@ -62,6 +102,67 @@ function ManufacturerDashboard({ onLogout }) {
 };
 useEffect(() => {
   fetchMyProducts();
+}, []);
+
+const fetchPendingRegistrations = async () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const response = await fetch(apiUrl("/products/registrations/pending"), {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Could not load pending registrations");
+
+    const registrations = data.registrations || [];
+    if (!registrations.length) {
+      setPendingRegistration(null);
+      return;
+    }
+
+    const cachedRaw = user.id
+      ? sessionStorage.getItem(`pendingProductRegistration:${user.id}`)
+      : null;
+    let cached = null;
+    try {
+      cached = JSON.parse(cachedRaw || "null");
+    } catch {
+      cached = null;
+    }
+    const priority = { MINT_CONFIRMED: 0, MINT_SUBMITTING: 1, PREPARED: 2 };
+    const selected = registrations.find((item) => item.registrationId === cached?.registrationId) ||
+      [...registrations].sort((left, right) => priority[left.status] - priority[right.status])[0];
+    const recovered = cached?.registrationId === selected.registrationId && cached.transactionHash
+      ? { ...selected, transactionHash: cached.transactionHash, status: "MINT_CONFIRMED" }
+      : selected;
+    setPendingRegistration(recovered);
+  } catch (error) {
+    console.error("Pending registration lookup failed:", error.message);
+  }
+};
+
+useEffect(() => {
+  fetchPendingRegistrations();
+}, []);
+
+useEffect(() => {
+  const loadPartners = async (type, setPartners) => {
+    try {
+      const response = await fetch(
+        apiUrl(`/products/partners?type=${type}`),
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Could not load partners");
+      setPartners(data.partners || []);
+      setPartnerLoadErrors((current) => ({ ...current, [type]: "" }));
+    } catch (error) {
+      console.error(`Could not load ${type.toLowerCase()}s:`, error.message);
+      setPartnerLoadErrors((current) => ({ ...current, [type]: error.message || "ProductRegistry V2 partner data is unavailable." }));
+    }
+  };
+
+  loadPartners("DISTRIBUTOR", setDistributors);
+  loadPartners("RETAILER", setRetailers);
 }, []);
 
   // =====================================================
@@ -182,67 +283,28 @@ useEffect(() => {
   // REGISTER PRODUCT
   // =====================================================
 
-  const registerProduct = async (e) => {
-  e.preventDefault();
-
-  if (
-  !productName.trim() ||
-  !productCategory ||
-  !productBrand.trim() ||
-  !productPrice ||
-  !batchNumber ||
-  !manufacturingDate ||
-  !referenceImage
-) {
-  alert("Please fill all required fields.");
-  return;
-} 
-
-  try {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      alert("Login session expired. Please login again.");
-      return;
-    }
-
-    const formData = new FormData();
-
-    formData.append("productName", productName.trim());
-    formData.append("category", productCategory);
-    formData.append("brandName", productBrand.trim());
-
-    
-    formData.append("batchNumber", batchNumber);
-    formData.append("manufacturingDate", manufacturingDate);
-    formData.append("referenceImage", referenceImage);
-    const response = await fetch(
-      "http://localhost:5000/api/products/",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      }
-    );
-
+  const sendRegistrationForPersistence = async (pending, transactionHash) => {
+    const response = await fetch(apiUrl("/products/confirm"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token")}`
+      },
+      body: JSON.stringify({
+        registrationId: pending.registrationId,
+        transactionHash
+      })
+    });
     const data = await response.json();
-
     if (!response.ok) {
-      throw new Error(
-        data.message || "Product registration failed"
-      );
+      const error = new Error(data.message || "Could not finalize the confirmed registration");
+      error.retryable = Boolean(data.retryable);
+      throw error;
     }
 
-    alert(
-      `Product registered successfully!\nProduct Code: ${data.product.productCode}`
-    );
-
-    // Get the newly registered product from MongoDB
+    rememberPendingRegistration(null);
+    alert(`Product registered successfully.\nProduct ID: ${data.product.productCode}\nTransaction: ${data.blockchain.transactionHash}`);
     await fetchMyProducts();
-
-    // Clear form
     setProductName("");
     setProductCategory("");
     setProductBrand("");
@@ -251,17 +313,130 @@ useEffect(() => {
     setBatchNumber("");
     setManufacturingDate("");
     setReferenceImage(null);
+    setSelectedDistributor("");
+    setSelectedRetailer("");
     navigate("products");
+  };
 
-  } catch (error) {
-    console.error(
-      "Product registration error:",
-      error
+  const assertMintWallet = async () => {
+    const token = localStorage.getItem("token");
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    if (!token) throw new Error("Login session expired. Please log in again.");
+    if (!user.walletAddress) throw new Error("Bind your manufacturer wallet from the Profile page first.");
+    if (!window.ethereum) throw new Error("MetaMask was not found in this browser.");
+
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    const address = accounts?.[0];
+    if (!address || address.toLowerCase() !== user.walletAddress.toLowerCase()) {
+      throw new Error("Select the wallet bound to this manufacturer account.");
+    }
+    const chainId = Number.parseInt(await window.ethereum.request({ method: "eth_chainId" }), 16);
+    if (chainId !== 11155111) throw new Error("Switch MetaMask to Ethereum Sepolia.");
+    return { address, token };
+  };
+
+  const submitPreparedRegistration = async (pending) => {
+    const { address, token } = await assertMintWallet();
+    const claimResponse = await fetch(
+      apiUrl(`/products/registrations/${encodeURIComponent(pending.registrationId)}/claim-mint`),
+      { method: "POST", headers: { Authorization: `Bearer ${token}` } }
     );
+    const claimData = await claimResponse.json();
+    if (!claimResponse.ok) throw new Error(claimData.message || "Registration is already being submitted.");
 
-    alert(error.message);
-  }
-};
+    const claimed = claimData.registration;
+    rememberPendingRegistration(claimed);
+    const transactionHash = await window.ethereum.request({
+      method: "eth_sendTransaction",
+      params: [{
+        from: address,
+        to: claimed.transaction.to,
+        data: claimed.transaction.data,
+        value: claimed.transaction.value
+      }]
+    });
+    const confirmedPending = { ...claimed, status: "MINT_CONFIRMED", transactionHash };
+    rememberPendingRegistration(confirmedPending);
+    await sendRegistrationForPersistence(confirmedPending, transactionHash);
+  };
+
+  const registerProduct = async (e) => {
+    e.preventDefault();
+    if (registrationBusy) return;
+    setRegistrationBusy(true);
+
+    try {
+      if (pendingRegistration) {
+        if (!pendingRegistration.registrationId) {
+          throw new Error("This browser-only pending mint has no durable server registration and cannot be safely retried.");
+        }
+        if (pendingRegistration.transactionHash || pendingRegistration.status === "MINT_CONFIRMED") {
+          const existingHash = pendingRegistration.transactionHash || pendingTransactionHash;
+          if (!existingHash) throw new Error("Enter the existing transaction hash; this retry will not send another mint.");
+          const confirmedPending = { ...pendingRegistration, transactionHash: existingHash, status: "MINT_CONFIRMED" };
+          rememberPendingRegistration(confirmedPending);
+          await sendRegistrationForPersistence(confirmedPending, existingHash);
+          return;
+        }
+        if (pendingRegistration.status === "MINT_SUBMITTING") {
+          if (!pendingTransactionHash) {
+            throw new Error("This registration is already reserved for a mint submission. Enter the existing MetaMask transaction hash; do not mint again.");
+          }
+          const confirmedPending = { ...pendingRegistration, transactionHash: pendingTransactionHash, status: "MINT_CONFIRMED" };
+          rememberPendingRegistration(confirmedPending);
+          await sendRegistrationForPersistence(confirmedPending, pendingTransactionHash);
+          return;
+        }
+        await submitPreparedRegistration(pendingRegistration);
+        return;
+      }
+
+      if (
+        !productName.trim() || !productCategory || !productBrand.trim() ||
+        !batchNumber || !manufacturingDate || !referenceImage ||
+        !selectedDistributor || !selectedRetailer
+      ) {
+        throw new Error("Complete the product details, reference image, distributor, and retailer.");
+      }
+
+      await assertMintWallet();
+      const product = {
+        productName: productName.trim(),
+        category: productCategory,
+        brandName: productBrand.trim(),
+        batchNumber: batchNumber.trim(),
+        manufacturingDate,
+        price: productPrice,
+        description: productDescription
+      };
+      const formData = new FormData();
+      Object.entries(product).forEach(([key, value]) => formData.append(key, value));
+      formData.append("distributorId", selectedDistributor);
+      formData.append("retailerId", selectedRetailer);
+      formData.append("referenceImage", referenceImage);
+      const idempotencyKey = crypto.randomUUID();
+      const preparedResponse = await fetch(apiUrl("/products/prepare"), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "Idempotency-Key": idempotencyKey
+        },
+        body: formData
+      });
+      const prepared = await preparedResponse.json();
+      if (!preparedResponse.ok) throw new Error(prepared.message || "Could not save a pending registration.");
+
+      const pending = { ...prepared, idempotencyKey };
+      rememberPendingRegistration(pending);
+      await submitPreparedRegistration(pending);
+    } catch (error) {
+      console.error("Product registration error:", error.message);
+      await fetchPendingRegistrations();
+      alert(error.message);
+    } finally {
+      setRegistrationBusy(false);
+    }
+  };
   // =====================================================
   // DELETE PRODUCT
   // =====================================================
@@ -282,7 +457,7 @@ useEffect(() => {
     }
 
     const response = await fetch(
-      `http://localhost:5000/api/products/${productCode}`,
+      apiUrl(`/products/${productCode}`),
       {
         method: "DELETE",
         headers: {
@@ -326,7 +501,8 @@ useEffect(() => {
       productCode: product.productCode,
       productName: product.productName,
       brandName: product.brandName,
-      category: product.category
+      category: product.category,
+      productHash: product.productHash
     })
   );
     const qrURL =
@@ -425,34 +601,6 @@ useEffect(() => {
             );
 
           if (matchingProduct) {
-
-            // Increase scan count
-            setProducts((previous) =>
-              previous.map((product) => {
-
-                if (
-                  product.id ===
-                  matchingProduct.id
-                ) {
-                  return {
-                    ...product,
-
-                    scans:
-                      Number(
-                        product.scans || 0
-                      ) + 1,
-
-                    genuineScans:
-                      Number(
-                        product.genuineScans || 0
-                      ) + 1,
-                  };
-                }
-
-                return product;
-              })
-            );
-
             setScanResult({
               found: true,
 
@@ -555,35 +703,7 @@ useEffect(() => {
 
   const Dashboard = () => {
 
-    const totalProducts =
-      products.length;
-
-   const totalScans = products.reduce(
-  (sum, product) =>
-    sum + Number(product.totalScans || 0),
-  0
-);
-
-    const genuineScans =
-      products.reduce(
-        (sum, product) =>
-          sum +
-          Number(
-            product.genuineScans || 0
-          ),
-        0
-      );
-
-    const counterfeitScans =
-      products.reduce(
-        (sum, product) =>
-          sum +
-          Number(
-            product.counterfeitScans ||
-              0
-          ),
-        0
-      );
+    const totalProducts = productsLoaded ? products.length : null;
 
     return (
       <>
@@ -599,26 +719,25 @@ useEffect(() => {
           <StatCard
             icon="📦"
             title="Total Products"
-            value={totalProducts}
+            value={displayMetric(totalProducts)}
           />
 
           <StatCard
             icon="▦"
-            title="Total Scans"
-            value={totalScans}
+            title="Total Verifications"
+            value={displayMetric(sumProductMetric("totalVerifications"))}
           />
 
           <StatCard
             icon="✓"
-            title="Genuine Scans"
-            value={genuineScans}
+            title="QR Scans"
+            value={displayMetric(sumProductMetric("qrScans"))}
           />
 
           <StatCard
-            icon="⚠"
-            title="Counterfeit Detected"
-            value={counterfeitScans}
-            danger
+            icon="▧"
+            title="Image Verifications"
+            value={displayMetric(sumProductMetric("imageVerifications"))}
           />
 
         </div>
@@ -695,8 +814,8 @@ useEffect(() => {
 
                       </div>
 
-                      <span className="status genuine">
-                        ✓ Genuine
+                      <span className="status registered">
+                        Registered
                       </span>
 
                     </div>
@@ -843,7 +962,7 @@ useEffect(() => {
                     .map((product) => (
 
                       <tr
-                        key={product.id}
+                        key={product._id || product.productCode}
                       >
 
                         <td>
@@ -859,9 +978,7 @@ useEffect(() => {
                         </td>
 
                         <td>
-                          <span className="status genuine">
-                            ✓ Genuine
-                          </span>
+                    <span className="status registered">Registered</span>
                         </td>
 
                       </tr>
@@ -943,8 +1060,10 @@ useEffect(() => {
                 <th>Product</th>
                 <th>Category</th>
                 <th>Brand</th>
-                <th>Status</th>
-                <th>Scans</th>
+                <th>Registration</th>
+                <th>Verifications</th>
+                <th>QR Scans</th>
+                <th>Image Checks</th>
                 <th>Actions</th>
               </tr>
 
@@ -978,30 +1097,22 @@ useEffect(() => {
 
                   <td>
 
-                    <span
-                      className={
-                        product.status === "GENUINE"
-  ? "status genuine"
-  : product.status === "SUSPICIOUS"
-  ? "status suspicious"
-  : product.status === "DEACTIVATED"
-  ? "status deactivated"
-  : "status unknown"
-                      }
-                    >
-                      {product.status === "GENUINE"
-  ? "✓ Genuine"
-  : product.status === "SUSPICIOUS"
-  ? "⚠ Suspicious"
-  : product.status === "DEACTIVATED"
-  ? "🚫 Deactivated"
-  : "❓ Unknown"}
+                    <span className="status registered">
+                      {product.status === "REGISTERED" ? "Registered" : "—"}
                     </span>
 
                   </td>
 
                   <td>
-                    {product.totalScans || 0}
+                    {displayMetric(product.totalVerifications)}
+                  </td>
+
+                  <td>
+                    {displayMetric(product.qrScans)}
+                  </td>
+
+                  <td>
+                    {displayMetric(product.imageVerifications)}
                   </td>
 
                   <td>
@@ -1151,7 +1262,7 @@ const registerPage = (
             <div className="form-group">
 
               <label>
-                Price *
+              Price (optional)
               </label>
 
               <input
@@ -1207,6 +1318,33 @@ const registerPage = (
 
 </div>
 
+<div className="form-grid">
+  <div className="form-group">
+    <label>Authorized Distributor *</label>
+    <select value={selectedDistributor} onChange={(e) => setSelectedDistributor(e.target.value)} required>
+      <option value="">Select an on-chain approved distributor</option>
+      {distributors.map((partner) => (
+        <option key={partner.id} value={partner.id}>
+          {partner.companyName} — {partner.walletAddress}
+        </option>
+      ))}
+    </select>
+    {partnerLoadErrors.DISTRIBUTOR && <p className="partner-list-error" role="alert">{partnerLoadErrors.DISTRIBUTOR}</p>}
+  </div>
+  <div className="form-group">
+    <label>Authorized Retailer *</label>
+    <select value={selectedRetailer} onChange={(e) => setSelectedRetailer(e.target.value)} required>
+      <option value="">Select an on-chain approved retailer</option>
+      {retailers.map((partner) => (
+        <option key={partner.id} value={partner.id}>
+          {partner.companyName} — {partner.walletAddress}
+        </option>
+      ))}
+    </select>
+    {partnerLoadErrors.RETAILER && <p className="partner-list-error" role="alert">{partnerLoadErrors.RETAILER}</p>}
+  </div>
+</div>
+
 <div className="form-group">
 
   <label>
@@ -1253,13 +1391,49 @@ const registerPage = (
             <button
               type="submit"
               className="primary-button"
+              disabled={registrationBusy}
             >
-              Register Product →
+              {registrationBusy
+                ? "Processing registration…"
+                : pendingRegistration?.status === "MINT_CONFIRMED" || pendingRegistration?.transactionHash
+                  ? "Retry saving confirmed registration"
+                  : pendingRegistration?.status === "MINT_SUBMITTING"
+                    ? "Confirm existing transaction"
+                    : pendingRegistration
+                      ? "Continue prepared registration"
+                      : "Prepare and mint with MetaMask →"}
             </button>
 
           </div>
 
         </form>
+
+        {pendingRegistration && (
+          <p role="status">
+            {pendingRegistration.status === "PREPARED"
+              ? "Registration and image are saved on the server before minting."
+              : pendingRegistration.status === "MINT_SUBMITTING"
+                ? "Mint submission was reserved. Do not submit another mint; provide the existing MetaMask transaction hash to continue."
+                : "The mint is confirmed. Retry only saves this same transaction; it will not submit another mint."}
+            <br />Product ID: {pendingRegistration.productCode}
+            <br />Registration: {pendingRegistration.registrationId}
+            {pendingRegistration.transactionHash && <><br />Transaction: {pendingRegistration.transactionHash}</>}
+          </p>
+        )}
+
+        {pendingRegistration?.status === "MINT_SUBMITTING" && !pendingRegistration.transactionHash && (
+          <div className="form-group">
+            <label htmlFor="existing-mint-transaction">Existing MetaMask transaction hash</label>
+            <input
+              id="existing-mint-transaction"
+              type="text"
+              value={pendingTransactionHash}
+              onChange={(event) => setPendingTransactionHash(event.target.value.trim())}
+              placeholder="0x…"
+              autoComplete="off"
+            />
+          </div>
+        )}
 
       </div>
     </>
@@ -1414,9 +1588,7 @@ const registerPage = (
               {scanResult.found ? (
 
                 <>
-                  <p>
-                    This QR code belongs to a registered product.
-                  </p>
+                  <p>This QR code matches a product in your manufacturer records. This lookup does not verify authenticity.</p>
 
                   <div className="scan-product-details">
 
@@ -1481,8 +1653,8 @@ const registerPage = (
                         Status:
                       </strong>
 
-                      <span className="green-text">
-                        ✓ Genuine
+                      <span className="status registered">
+                        Registered in your records
                       </span>
                     </div>
 
@@ -1606,34 +1778,6 @@ const registerPage = (
   // =====================================================
 
   const MonitoringPage = () => {
-
-    const totalScans = products.reduce(
-  (sum, product) =>
-    sum + Number(product.totalScans || 0),
-  0
-);
-
-    const genuine =
-      products.reduce(
-        (sum, product) =>
-          sum +
-          Number(
-            product.genuineScans || 0
-          ),
-        0
-      );
-
-    const counterfeit =
-      products.reduce(
-        (sum, product) =>
-          sum +
-          Number(
-            product.counterfeitScans ||
-              0
-          ),
-        0
-      );
-
     return (
       <>
         <PageHeader
@@ -1641,31 +1785,32 @@ const registerPage = (
           subtitle="Monitor product verification activity."
         />
 
+        <LifecycleWorkflow role="MANUFACTURER" compact />
+
         <div className="stats-grid">
 
           <StatCard
             icon="📦"
             title="Products"
-            value={products.length}
-          />
-
-          <StatCard
-            icon="✓"
-            title="Genuine"
-            value={genuine}
+            value={displayMetric(productsLoaded ? products.length : null)}
           />
 
           <StatCard
             icon="📷"
-            title="Total Scans"
-            value={totalScans}
+            title="Total Verifications"
+            value={displayMetric(sumProductMetric("totalVerifications"))}
           />
 
           <StatCard
-            icon="⚠"
-            title="Counterfeit"
-            value={counterfeit}
-            danger
+            icon="▦"
+            title="QR Scans"
+            value={displayMetric(sumProductMetric("qrScans"))}
+          />
+
+          <StatCard
+            icon="▧"
+            title="Image Verifications"
+            value={displayMetric(sumProductMetric("imageVerifications"))}
           />
 
         </div>
@@ -1715,21 +1860,13 @@ const registerPage = (
                       Product ID
                     </th>
 
-                    <th>
-                      Status
-                    </th>
-
-                    <th>
-                      Scans
-                    </th>
-
-                    <th>
-                      Genuine
-                    </th>
-
-                    <th>
-                      Counterfeit
-                    </th>
+                    <th>Registration</th>
+                    <th>Total Verifications</th>
+                    <th>QR Scans</th>
+                    <th>Image Checks</th>
+                    <th>Genuine Results</th>
+                    <th>Suspicious Results</th>
+                    <th>Fake Results</th>
 
                     <th>
                       Registered
@@ -1756,35 +1893,34 @@ const registerPage = (
                         </td>
 
                         <td>
-                          <span className="status genuine">
-                            ✓ Genuine
+                          <span className="status registered">
+                            {product.status === "REGISTERED" ? "Registered" : "—"}
                           </span>
                         </td>
 
                         <td>
-                          {product.totalScans || 0}
+                          {displayMetric(product.totalVerifications)}
+                        </td>
+
+                        <td>
+                          {displayMetric(product.qrScans)}
+                        </td>
+
+                        <td>
+                          {displayMetric(product.imageVerifications)}
                         </td>
 
                         <td className="green-text">
-                          {
-                            product.genuineScans ||
-                            0
-                          }
+                          {displayMetric(product.verificationStatusCounts?.GENUINE)}
                         </td>
 
                         <td className="red-text">
-                          {
-                            product.counterfeitScans ||
-                            0
-                          }
+                          {displayMetric(product.verificationStatusCounts?.SUSPICIOUS)}
                         </td>
-                        <td>
-                           {
-                             product.createdAt
-                             ? new Date(product.createdAt).toLocaleDateString()
-                             : "-"
-                            }
+                        <td className="red-text">
+                          {displayMetric(product.verificationStatusCounts?.FAKE)}
                         </td>
+                        <td>{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : "—"}</td>
 
                       </tr>
 
@@ -1811,6 +1947,7 @@ const registerPage = (
   const ProfilePage = () => (
 
     <>
+      <WalletBinding />
       <PageHeader
         title="Manufacturer Profile"
         subtitle="Manage your manufacturer account information."

@@ -33,6 +33,18 @@ const productSchema = new mongoose.Schema(
             trim: true
         },
 
+        price: {
+            type: Number,
+            min: 0,
+            default: null
+        },
+
+        description: {
+            type: String,
+            default: "",
+            trim: true
+        },
+
         manufacturingDate: {
             type: Date,
             required: true
@@ -48,31 +60,84 @@ const productSchema = new mongoose.Schema(
             type: String,
             default: ""
         },
-        
-        qrCode: {
-          type: String,
-          default: ""
+
+        imageHash: {
+            type: String,
+            required: true
         },
 
-        visualFeatures: {
-            type: [Number],
-            default: []
+        productHash: {
+            type: String,
+            required: true
         },
 
-        blockchainHash: {
+        ipfsImageHash: {
             type: String,
             default: ""
         },
 
-        verificationStatus: {
+        manufacturerWallet: {
             type: String,
-            enum: ["GENUINE", "SUSPICIOUS", "FAKE"],
-            default: "GENUINE"
+            required: true,
+            lowercase: true
         },
 
-        totalScans: {
+        authorizedDistributor: {
+            type: String,
+            required: true,
+            lowercase: true
+        },
+
+        authorizedDistributorId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "SupplyChainPartner",
+            required: true
+        },
+
+        authorizedRetailer: {
+            type: String,
+            required: true,
+            lowercase: true
+        },
+
+        authorizedRetailerId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "SupplyChainPartner",
+            required: true
+        },
+
+        transactionHash: {
+            type: String,
+            required: true,
+            unique: true
+        },
+
+        // Historical records without these fields resolve to the configured V1 registry.
+        registryVersion: {
             type: Number,
-            default: 0
+            enum: [1, 2],
+            default: undefined
+        },
+
+        registryAddress: {
+            type: String,
+            lowercase: true,
+            default: undefined
+        },
+
+        chainId: {
+            type: Number,
+            default: undefined
+        },
+
+        mintedAt: {
+            type: Date,
+            required: true
+        },
+
+        qrCode: {
+            type: String,
+            default: ""
         }
     },
     {

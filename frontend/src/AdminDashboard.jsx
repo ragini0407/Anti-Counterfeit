@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Settings as SettingsIcon } from "lucide-react";
 
 import {
   MapContainer,
@@ -10,25 +11,17 @@ import {
 
 import L from "leaflet";
 
+import { apiUrl } from "./api";
+import { fetchAdminDashboard, fetchAdminVerifications, fetchAdminProductLifecycle } from "./adminDashboardApi";
+
 import "leaflet/dist/leaflet.css";
 import "./AdminDashboard.css";
 
-
-// =========================================================
-// LEAFLET MARKER FIX
-// =========================================================
-
 delete L.Icon.Default.prototype._getIconUrl;
-
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-
-  iconUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-
-  shadowUrl:
-    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png"
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png"
 });
 
 
@@ -117,13 +110,6 @@ function Icon({ type, size = 20 }) {
       </svg>
     ),
 
-    settings: (
-      <svg {...common}>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.7 1.7-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20h-2.4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L8 17l.1-.1A1.7 1.7 0 0 0 8.4 15a1.7 1.7 0 0 0-1.6-1H6v-2.4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L7.3 8.6 9 6.9l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19 8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v2.4h-.1a1.7 1.7 0 0 0-1.6 1Z" />
-      </svg>
-    ),
-
     search: (
       <svg {...common}>
         <circle cx="11" cy="11" r="6.5" />
@@ -175,34 +161,13 @@ function Icon({ type, size = 20 }) {
   return icons[type] || null;
 }
 
-
-// =========================================================
-// MAP CONTROLLER
-// =========================================================
-
 function MapController({ selectedLocation }) {
-
   const map = useMap();
-
   useEffect(() => {
-
-    if (!selectedLocation) {
-      return;
+    if (selectedLocation) {
+      map.flyTo([selectedLocation.latitude, selectedLocation.longitude], 12, { duration: 1.2 });
     }
-
-    map.flyTo(
-      [
-        selectedLocation.latitude,
-        selectedLocation.longitude
-      ],
-      12,
-      {
-        duration: 1.2
-      }
-    );
-
   }, [selectedLocation, map]);
-
   return null;
 }
 
@@ -229,11 +194,7 @@ function AdminDashboard({ onLogout }) {
   const [showProfile, setShowProfile] =
     useState(false);
 
-  const [showDatePicker, setShowDatePicker] =
-    useState(false);
-
-  const [selectedLocation, setSelectedLocation] =
-    useState(null);
+  const [selectedLocation, setSelectedLocation] = useState(null);
 
   const [toast, setToast] =
     useState("");
@@ -253,6 +214,14 @@ function AdminDashboard({ onLogout }) {
       stats: {
         totalProducts: 0,
         totalScans: 0,
+        qrScans: null,
+        imageVerifications: null,
+        scoringStatusCounts: {
+          SCORED: null,
+          INSUFFICIENT_DATA: null,
+          UNAVAILABLE: null
+        },
+        validLocationScans: null,
         genuineScans: 0,
         suspiciousScans: 0,
         fakeScans: 0,
@@ -269,15 +238,41 @@ function AdminDashboard({ onLogout }) {
       alerts: [],
       locations: [],
       verificationActivity: [],
-      blockchainRecords: []
+      blockchainRecords: [],
+      locationDataAvailability: { available: false }
     });
+
+  const [dashboardPages, setDashboardPages] = useState({
+    products: 1,
+    manufacturers: 1,
+    recentVerifications: 1,
+    alerts: 1,
+    pageSize: 20
+  });
+  const [verificationRows, setVerificationRows] = useState([]);
+  const [verificationPagination, setVerificationPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 0 });
+  const [verificationFilters, setVerificationFilters] = useState({ type: "", status: "", scoringStatus: "", productCode: "" });
+  const [verificationPage, setVerificationPage] = useState(1);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
+  const [lifecycleProductCode, setLifecycleProductCode] = useState("");
+  const [lifecycleDetail, setLifecycleDetail] = useState(null);
+  const [lifecycleDetailLoading, setLifecycleDetailLoading] = useState(false);
+  const [lifecycleDetailError, setLifecycleDetailError] = useState("");
+  const [lifecycleDetailPage, setLifecycleDetailPage] = useState(1);
+
+  const [pendingPartners, setPendingPartners] = useState([]);
+  const [partnersLoading, setPartnersLoading] = useState(false);
+  const [partnersError, setPartnersError] = useState("");
+  const [partnersNotice, setPartnersNotice] = useState("");
+  const [partnerActionId, setPartnerActionId] = useState("");
 
 
   // =====================================================
   // LOAD REAL ADMIN DATA
   // =====================================================
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (requestedPages = dashboardPages) => {
 
     try {
 
@@ -293,43 +288,26 @@ function AdminDashboard({ onLogout }) {
         );
       }
 
-      const response =
-        await fetch(
-          "http://localhost:5000/api/admin/dashboard",
-          {
-            method: "GET",
-
-            headers: {
-              Authorization:
-                `Bearer ${token}`
-            }
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (!response.ok) {
+      let data;
+      try {
+        data = await fetchAdminDashboard({
+          url: apiUrl("/admin/dashboard"),
+          token,
+          pages: requestedPages
+        });
+      } catch (requestError) {
 
         if (
-          response.status === 401 ||
-          response.status === 403
+          /expired|unauthorized|authentication|required|invalid/i.test(requestError.message)
         ) {
           localStorage.removeItem("token");
           localStorage.removeItem("user");
-
-          throw new Error(
-            "Admin session expired or unauthorized. Please login again."
-          );
         }
-
-        throw new Error(
-          data.message ||
-          "Failed to load admin dashboard"
-        );
+        throw requestError;
       }
 
       setDashboardData(data);
+      setDashboardPages(requestedPages);
 
     } catch (err) {
 
@@ -349,6 +327,94 @@ function AdminDashboard({ onLogout }) {
     }
   };
 
+  const loadVerificationRecords = async (filters = verificationFilters, page = verificationPage) => {
+    try {
+      setVerificationLoading(true);
+      setVerificationError("");
+      const token = localStorage.getItem("token");
+      const data = await fetchAdminVerifications({
+        url: apiUrl("/admin/verifications"),
+        token,
+        filters,
+        page,
+        pageSize: 20
+      });
+      setVerificationRows(Array.isArray(data.verifications) ? data.verifications : []);
+      setVerificationPagination(data.pagination || { page, pageSize: 20, total: 0, totalPages: 0 });
+      setVerificationPage(page);
+    } catch (requestError) {
+      setVerificationError(requestError.message || "Verification records could not be loaded.");
+      setVerificationRows([]);
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
+  const loadLifecycleDetail = async (productCode, page = 1) => {
+    setLifecycleDetailLoading(true);
+    setLifecycleDetailError("");
+    setLifecycleProductCode(productCode);
+    setLifecycleDetailPage(page);
+    try {
+      const data = await fetchAdminProductLifecycle({
+        url: apiUrl(`/admin/products/${encodeURIComponent(productCode)}/lifecycle`),
+        token: localStorage.getItem("token"),
+        page,
+        pageSize: 20
+      });
+      setLifecycleDetail(data);
+    } catch (requestError) {
+      setLifecycleDetail(null);
+      setLifecycleDetailError(requestError.message || "Product lifecycle data could not be loaded.");
+    } finally {
+      setLifecycleDetailLoading(false);
+    }
+  };
+
+  const changeDashboardPage = (section, page) => {
+    const requestedPages = { ...dashboardPages, [section]: page };
+    setDashboardPages(requestedPages);
+    loadDashboardData(requestedPages);
+  };
+
+  const applyVerificationFilters = () => {
+    setVerificationPage(1);
+    loadVerificationRecords(verificationFilters, 1);
+  };
+
+  const openProductVerifications = (productCode) => {
+    const filters = { ...verificationFilters, productCode };
+    setVerificationFilters(filters);
+    setVerificationPage(1);
+    setActivePage("verifications");
+    loadVerificationRecords(filters, 1);
+  };
+
+  const loadPendingPartners = async () => {
+    try {
+      setPartnersLoading(true);
+      setPartnersError("");
+
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Admin login session not found. Please log in again.");
+
+      const response = await fetch(apiUrl("/admin/partners/pending"), {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.message || "Could not load pending partner applications.");
+      }
+
+      setPendingPartners(Array.isArray(data.partners) ? data.partners : []);
+    } catch (requestError) {
+      setPartnersError(requestError.message || "Could not load pending partner applications.");
+    } finally {
+      setPartnersLoading(false);
+    }
+  };
+
 
   // =====================================================
   // LOAD DATA ON DASHBOARD OPEN
@@ -357,6 +423,10 @@ function AdminDashboard({ onLogout }) {
   useEffect(() => {
 
     loadDashboardData();
+    if (localStorage.getItem("adminActivePage") === "partners") {
+      loadPendingPartners();
+    }
+    if (localStorage.getItem("adminActivePage") === "verifications") loadVerificationRecords();
 
   }, []);
 
@@ -398,6 +468,13 @@ function AdminDashboard({ onLogout }) {
     setActivePage(page);
     setSidebarOpen(false);
     setSearchText("");
+    if (page === "partners") {
+      setPartnersNotice("");
+      loadPendingPartners();
+    }
+    if (page === "verifications") {
+      loadVerificationRecords(verificationFilters, 1);
+    }
 
   };
 
@@ -467,6 +544,8 @@ function AdminDashboard({ onLogout }) {
     verificationActivity,
     blockchainRecords
   } = dashboardData;
+  const displayMetric = (value) =>
+    Number.isFinite(value) ? value.toLocaleString() : "—";
 
 
   // =====================================================
@@ -497,15 +576,23 @@ function AdminDashboard({ onLogout }) {
           key: "manufacturers"
         },
         {
+          name: "Partner Applications",
+          key: "partners"
+        },
+        {
           name: "Product Monitoring",
           key: "products"
         },
         {
-          name: "Counterfeit Activity",
+          name: "Verification Event Log",
+          key: "verifications"
+        },
+        {
+          name: "Risk & Integrity Activity",
           key: "counterfeit"
         },
         {
-          name: "Fraud Alerts",
+          name: "Security Events",
           key: "alerts"
         },
         {
@@ -595,7 +682,7 @@ function AdminDashboard({ onLogout }) {
         (alert) => {
 
           const productName =
-            alert.productId?.productName ||
+            alert.product?.productName ||
             "";
 
           if (
@@ -680,7 +767,7 @@ function AdminDashboard({ onLogout }) {
 
         const response =
           await fetch(
-            `http://localhost:5000/api/admin/manufacturers/${id}/${action}`,
+            apiUrl(`/admin/manufacturers/${id}/${action}`),
             {
               method: "PUT",
 
@@ -722,103 +809,46 @@ function AdminDashboard({ onLogout }) {
       }
     };
 
+  const updatePartner = async (partnerId, action) => {
+    setPartnerActionId(`${partnerId}:${action}`);
+    setPartnersError("");
+    setPartnersNotice("");
+
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Admin login session not found. Please log in again.");
+
+      const response = await fetch(
+        apiUrl(`/admin/partners/${partnerId}/${action}`),
+        {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.message || `Unable to ${action} partner application.`);
+      }
+
+      setPartnersNotice(data.message || `Partner application ${action}d successfully.`);
+      await loadPendingPartners();
+    } catch (requestError) {
+      setPartnersError(requestError.message || `Unable to ${action} partner application.`);
+    } finally {
+      setPartnerActionId("");
+    }
+  };
+
 
   // =====================================================
   // CALCULATE MANUFACTURER DISPLAY DATA
   // =====================================================
 
-  const manufacturerDisplayData =
-    useMemo(() => {
-
-      return manufacturers.map(
-        (manufacturer) => {
-
-          const manufacturerId =
-            manufacturer._id;
-
-          const manufacturerProducts =
-            products.filter(
-              (product) => {
-
-                const productManufacturer =
-                  product.manufacturerId;
-
-                if (
-                  typeof productManufacturer ===
-                  "object"
-                ) {
-                  return (
-                    productManufacturer?._id ===
-                    manufacturerId
-                  );
-                }
-
-                return (
-                  productManufacturer ===
-                  manufacturerId
-                );
-              }
-            );
-
-
-          const manufacturerVerifications =
-            recentVerifications.filter(
-              (verification) => {
-
-                const product =
-                  verification.productId;
-
-                return (
-                  product?.manufacturerId ===
-                  manufacturerId
-                );
-              }
-            );
-
-
-          const genuine =
-            manufacturerVerifications.filter(
-              (item) =>
-                item.status ===
-                "GENUINE"
-            ).length;
-
-
-          const counterfeit =
-            manufacturerVerifications.filter(
-              (item) =>
-                item.status ===
-                  "FAKE" ||
-                item.status ===
-                  "SUSPICIOUS"
-            ).length;
-
-
-          return {
-
-            ...manufacturer,
-
-            displayName:
-              manufacturer.companyName ||
-              manufacturer.userId?.name ||
-              "Unknown Manufacturer",
-
-            productCount:
-              manufacturerProducts.length,
-
-            genuine,
-
-            counterfeit
-          };
-
-        }
-      );
-
-    }, [
-      manufacturers,
-      products,
-      recentVerifications
-    ]);
+  const manufacturerDisplayData = manufacturers.map((manufacturer) => ({
+    ...manufacturer,
+    displayName: manufacturer.companyName || manufacturer.userId?.name || "Unknown Manufacturer"
+  }));
 
 
   // =====================================================
@@ -848,10 +878,13 @@ function AdminDashboard({ onLogout }) {
             grouped[date] = {
               date,
               genuine: 0,
-              counterfeit: 0
+              risk: 0,
+              total: 0
             };
 
           }
+
+          grouped[date].total += item.count;
 
           if (
             status === "GENUINE"
@@ -867,7 +900,7 @@ function AdminDashboard({ onLogout }) {
             status === "SUSPICIOUS"
           ) {
 
-            grouped[date].counterfeit +=
+            grouped[date].risk +=
               item.count;
 
           }
@@ -945,19 +978,17 @@ function AdminDashboard({ onLogout }) {
         : 0;
 
 
-    const counterfeitTotal =
-      stats.fakeScans +
-      stats.suspiciousScans;
-
-
-    const counterfeitPercentage =
+    const fakePercentage =
       stats.totalScans > 0
         ? (
-            (counterfeitTotal /
+            (stats.fakeScans /
               stats.totalScans) *
             100
           ).toFixed(1)
         : 0;
+    const suspiciousPercentage = stats.totalScans > 0
+      ? ((stats.suspiciousScans / stats.totalScans) * 100).toFixed(1)
+      : 0;
 
 
     return (
@@ -1004,30 +1035,39 @@ function AdminDashboard({ onLogout }) {
           <StatCard
             icon="blockchain"
             iconClass="blue"
-            title="Total Scans"
+            title="Total Verifications"
             value={stats.totalScans.toLocaleString()}
             change="Live"
-            subtitle="verification records"
+            subtitle="QR scans and image checks"
           />
 
           <StatCard
             icon="shield"
             iconClass="green"
-            title="Genuine Scans"
+            title="GENUINE outcomes"
             value={stats.genuineScans.toLocaleString()}
             change={`${genuinePercentage}%`}
-            subtitle="of verification scans"
+            subtitle="stored verification records"
             green
           />
 
           <StatCard
             icon="alert"
             iconClass="red"
-            title="Counterfeit Detected"
-            value={counterfeitTotal.toLocaleString()}
-            change={`${counterfeitPercentage}%`}
-            subtitle="fake + suspicious"
+            title="FAKE outcomes"
+            value={stats.fakeScans.toLocaleString()}
+            change={`${fakePercentage}%`}
+            subtitle="stored verification records"
             red
+          />
+
+          <StatCard
+            icon="alert"
+            iconClass="purple"
+            title="SUSPICIOUS outcomes"
+            value={stats.suspiciousScans.toLocaleString()}
+            change={`${suspiciousPercentage}% · review signal`}
+            subtitle="not a confirmed counterfeit count"
           />
 
           <StatCard
@@ -1040,6 +1080,24 @@ function AdminDashboard({ onLogout }) {
           />
 
         </div>
+
+        <section className="dashboard-card full-card dashboard-metrics-card" aria-label="Verification and scan scoring metrics">
+          <div className="card-header">
+            <div>
+              <h2>AI scan-risk assessment</h2>
+              <p className="card-subtitle">These are stored model-assessment states for QR scans, separate from the verification outcome above.</p>
+            </div>
+          </div>
+          <div className="dashboard-metrics-grid">
+            <div className="dashboard-metric"><span>QR scans</span><strong>{displayMetric(stats.qrScans)}</strong></div>
+            <div className="dashboard-metric"><span>Manual code lookups</span><strong>{displayMetric(stats.manualCodeLookups)}</strong></div>
+            <div className="dashboard-metric"><span>Image verifications</span><strong>{displayMetric(stats.imageVerifications)}</strong></div>
+            <div className="dashboard-metric scoring-scored"><span>SCORED</span><strong>{displayMetric(stats.scoringStatusCounts?.SCORED)}</strong></div>
+            <div className="dashboard-metric scoring-insufficient"><span>INSUFFICIENT_DATA</span><strong>{displayMetric(stats.scoringStatusCounts?.INSUFFICIENT_DATA)}</strong></div>
+            <div className="dashboard-metric scoring-unavailable"><span>UNAVAILABLE</span><strong>{displayMetric(stats.scoringStatusCounts?.UNAVAILABLE)}</strong><small>Not a safe result or a fraud finding.</small></div>
+          </div>
+          <p className="assessment-separation-note">A product’s stored verification outcome, its saved transaction reference, and its AI scan-risk assessment are separate records of evidence.</p>
+        </section>
 
 
         {/* MIDDLE ROW */}
@@ -1071,12 +1129,12 @@ function AdminDashboard({ onLogout }) {
 
               <span>
                 <i className="legend-blue"></i>
-                Genuine Scans
+                Genuine outcomes
               </span>
 
               <span>
                 <i className="legend-red"></i>
-                Counterfeit Scans
+                Fake / suspicious outcomes
               </span>
 
             </div>
@@ -1147,7 +1205,7 @@ function AdminDashboard({ onLogout }) {
 
               <DistributionItem
                 color="red"
-                title="Fake"
+                title="FAKE outcomes"
                 percentage={
                   stats.totalScans > 0
                     ? `${(
@@ -1162,7 +1220,7 @@ function AdminDashboard({ onLogout }) {
 
               <DistributionItem
                 color="orange"
-                title="Suspicious"
+                title="SUSPICIOUS outcomes"
                 percentage={
                   stats.totalScans > 0
                     ? `${(
@@ -1195,18 +1253,16 @@ function AdminDashboard({ onLogout }) {
               </h2>
 
               <p className="card-subtitle">
-                Latest product verification records
+                Stored result and AI assessment are shown as separate signals.
               </p>
 
             </div>
 
             <button
               className="view-link"
-              onClick={() =>
-                navigate("products")
-              }
+              onClick={() => navigate("verifications")}
             >
-              View Products
+              Open event log
             </button>
 
           </div>
@@ -1265,18 +1321,18 @@ function AdminDashboard({ onLogout }) {
                     <div className="activity-details">
 
                       <strong>
-                        {verification.productId
+                        {verification.product
                           ?.productName ||
                           "Unknown Product"}
                       </strong>
 
                       <span>
-                        {verification.productCode}
+                        <span className="type-mono">{verification.productCode}</span>
                         {" • "}
                         {verification.verificationType}
                       </span>
 
-                      <small>
+                      <small className="type-mono">
                         {formatDate(
                           verification.createdAt
                         )}
@@ -1285,18 +1341,10 @@ function AdminDashboard({ onLogout }) {
                     </div>
 
 
-                    <span
-                      className={
-                        verification.status ===
-                        "GENUINE"
-                          ? "green-text"
-                          : "danger-text"
-                      }
-                    >
-                      {statusLabel(
-                        verification.status
-                      )}
-                    </span>
+                    <div className="activity-assessments">
+                      <VerificationOutcomeBadge status={verification.status} />
+                      <ScoringStatusBadge verification={verification} />
+                    </div>
 
                   </div>
 
@@ -1305,6 +1353,14 @@ function AdminDashboard({ onLogout }) {
             </div>
 
           )}
+
+          <PageControls
+            page={dashboardData.pagination?.recentVerifications?.page || 1}
+            totalPages={dashboardData.pagination?.recentVerifications?.totalPages || 0}
+            total={dashboardData.pagination?.recentVerifications?.total || 0}
+            onPageChange={(page) => changeDashboardPage("recentVerifications", page)}
+            disabled={loading}
+          />
 
         </div>
 
@@ -1417,6 +1473,8 @@ function AdminDashboard({ onLogout }) {
                     <th>
                       Status
                     </th>
+
+                    <th>Activity</th>
 
                     <th>
                       Contact
@@ -1576,6 +1634,14 @@ function AdminDashboard({ onLogout }) {
 
           )}
 
+          <PageControls
+            page={dashboardData.pagination?.manufacturers?.page || 1}
+            totalPages={dashboardData.pagination?.manufacturers?.totalPages || 0}
+            total={dashboardData.pagination?.manufacturers?.total || 0}
+            onPageChange={(page) => changeDashboardPage("manufacturers", page)}
+            disabled={loading}
+          />
+
         </div>
 
       </div>
@@ -1588,22 +1654,6 @@ function AdminDashboard({ onLogout }) {
   // =====================================================
 
   const renderProducts = () => {
-
-    const genuineProducts =
-  products.filter(
-    (product) => product.status === "GENUINE"
-  ).length;
-
-const suspiciousProducts =
-  products.filter(
-    (product) => product.status === "SUSPICIOUS"
-  ).length;
-
-const deactivatedProducts =
-  products.filter(
-    (product) => product.status === "DEACTIVATED"
-  ).length;
-
     return (
       <div className="inner-page">
 
@@ -1616,8 +1666,7 @@ const deactivatedProducts =
             </h1>
 
             <p>
-              Monitor real products registered
-              in the platform.
+              Product registration records and their saved verification metrics.
             </p>
 
           </div>
@@ -1636,33 +1685,31 @@ const deactivatedProducts =
 
           <MonitorCard
             title="Total Products"
-            value={products.length}
+            value={stats.totalProducts}
             change="Live"
             icon="box"
           />
 
           <MonitorCard
-            title="Genuine Products"
-            value={genuineProducts}
-            change="Registered"
+            title="Records on this page"
+            value={products.length}
+            change="Paginated results"
             icon="shield"
-            green
           />
 
           <MonitorCard
-            title="Suspicious Products"
-            value={suspiciousProducts}
-            change="Flagged"
+            title="Saved transaction references"
+            value={products.filter((product) => Boolean(product.transactionHash)).length}
+            change="MongoDB records · not a live chain check"
+            icon="blockchain"
+          />
+
+          <MonitorCard
+            title="Live chain status"
+            value="Not checked"
+            change="No RPC read is performed by this page"
             icon="alert"
           />
-
-          <MonitorCard
-  title="Deactivated Products"
-  value={deactivatedProducts}
-  change="Blockchain status"
-  icon="alert"
-  danger
-/>
 
         </div>
 
@@ -1678,7 +1725,7 @@ const deactivatedProducts =
               </h2>
 
               <p className="card-subtitle">
-                Products registered on the Blockchain
+                Stored product registration records; the current chain state is not fetched here.
               </p>
 
             </div>
@@ -1726,13 +1773,12 @@ const deactivatedProducts =
                       Manufacturer
                     </th>
 
-                    <th>
-                      Scans
-                    </th>
+                    <th>Verifications</th>
 
                     <th>
                       Status
                     </th>
+                    <th>Actions</th>
 
                   </tr>
 
@@ -1757,9 +1803,7 @@ const deactivatedProducts =
                         </td>
 
                         <td>
-                          {
-                            product.productCode
-                          }
+                          <span className="type-mono">{product.productCode}</span>
                         </td>
 
                         <td>
@@ -1783,28 +1827,22 @@ const deactivatedProducts =
                         </td>
 
                         <td>
-                          {
-                            product.totalScans ||
-                            0
-                          }
+                          {displayMetric(product.totalVerifications ?? product.totalScans)}
                         </td>
 
                         <td>
 
                           <span
-  className={
-    product.status === "GENUINE"
-      ? "green-text"
-      : product.status === "SUSPICIOUS"
-      ? "suspicious-text"
-      : product.status === "DEACTIVATED"
-      ? "danger-text"
-      : "unknown-text"
-  }
+  className="status registered"
 >
-  {statusLabel(product.status)}
+  {product.status === "REGISTERED" ? "Registered in MongoDB" : "Status unavailable"}
 </span>
 
+                        </td>
+
+                        <td className="product-admin-actions">
+                          <button className="secondary-button" onClick={() => openProductVerifications(product.productCode)}>View verifications</button>
+                          <button className="secondary-button" onClick={() => loadLifecycleDetail(product.productCode)}>Lifecycle details</button>
                         </td>
 
                       </tr>
@@ -1818,6 +1856,64 @@ const deactivatedProducts =
 
             </div>
 
+          )}
+
+          <PageControls
+            page={dashboardData.pagination?.products?.page || 1}
+            totalPages={dashboardData.pagination?.products?.totalPages || 0}
+            total={dashboardData.pagination?.products?.total || 0}
+            onPageChange={(page) => changeDashboardPage("products", page)}
+            disabled={loading}
+          />
+
+          {(lifecycleProductCode || lifecycleDetailLoading || lifecycleDetailError) && (
+            <section className="dashboard-card lifecycle-admin-detail" aria-live="polite" aria-label="Product lifecycle and verification detail">
+              <div className="card-header">
+                <div>
+                  <h2>Lifecycle and verification detail</h2>
+                  <p className="card-subtitle">{lifecycleProductCode || "Selected product"} · blockchain state and stored records are shown separately.</p>
+                </div>
+                <button type="button" className="secondary-button" onClick={() => loadLifecycleDetail(lifecycleProductCode, lifecycleDetailPage)} disabled={lifecycleDetailLoading}>Refresh</button>
+              </div>
+              {lifecycleDetailLoading ? <div className="dashboard-state" role="status">Loading verified lifecycle and verification records…</div> : null}
+              {lifecycleDetailError ? <div className="dashboard-state dashboard-state-error" role="alert">{lifecycleDetailError}</div> : null}
+              {lifecycleDetail && !lifecycleDetailLoading && (
+                <>
+                  <div className="lifecycle-admin-summary">
+                    <div><span>Registry</span><strong>V{lifecycleDetail.registry?.version || "?"}</strong><small>{lifecycleDetail.registry?.address || "Address unavailable"}</small></div>
+                    <div><span>Chain</span><strong>{lifecycleDetail.registry?.chainId || "—"}</strong></div>
+                    <div><span>Current chain state</span><strong>{lifecycleDetail.chain?.state || lifecycleDetail.chain?.status || "Unavailable"}</strong><small>Custodian {lifecycleDetail.chain?.currentCustodian ? `${lifecycleDetail.chain.currentCustodian.slice(0, 8)}…${lifecycleDetail.chain.currentCustodian.slice(-6)}` : "unavailable"}</small></div>
+                  </div>
+                  {lifecycleDetail.lifecycleHistoryStatus === "NOT_INDEXED_FOR_LEGACY_REGISTRY" && <p className="lifecycle-admin-note">Legacy V1 transition events were not indexed by the application. The current state is a live read when available; no historical events are inferred.</p>}
+                  {lifecycleDetail.lifecycleHistoryStatus === "REGISTRY_IDENTITY_UNRESOLVED" && <p className="lifecycle-admin-note">Saved chain and registry provenance is incomplete or conflicting. No registry was queried and no lifecycle history is attributed to this product.</p>}
+                  <h3 className="lifecycle-admin-subheading">Confirmed custody events</h3>
+                  {lifecycleDetail.lifecycle?.length ? (
+                    <div className="verification-table-wrap"><table className="verification-table"><thead><tr><th>Action</th><th>State change</th><th>Actor</th><th>Custodian</th><th>Transaction</th><th>Confirmed at</th></tr></thead><tbody>
+                      {lifecycleDetail.lifecycle.map((event) => <tr key={`${event.transactionHash}:${event.logIndex}`}><td>{event.action}</td><td>{["MINTED", "DISPATCHED_TO_DISTRIBUTOR", "RECEIVED_BY_DISTRIBUTOR", "DISPATCHED_TO_RETAILER", "RECEIVED_BY_RETAILER", "SOLD", "FLAGGED_COUNTERFEIT"][event.previousState] || event.previousState} → {["MINTED", "DISPATCHED_TO_DISTRIBUTOR", "RECEIVED_BY_DISTRIBUTOR", "DISPATCHED_TO_RETAILER", "RECEIVED_BY_RETAILER", "SOLD", "FLAGGED_COUNTERFEIT"][event.newState] || event.newState}</td><td className="type-mono">{event.actorWallet}</td><td className="type-mono">{event.custodian}</td><td className="type-mono">{event.transactionHash}</td><td>{event.eventTimestamp ? new Date(event.eventTimestamp).toLocaleString() : "—"}</td></tr>)}
+                    </tbody></table></div>
+                  ) : <div className="dashboard-state">No confirmed lifecycle events are stored for this registry record.</div>}
+                  <h3 className="lifecycle-admin-subheading">Failed transaction attempts</h3>
+                  {lifecycleDetail.failedOperations?.length ? (
+                    <div className="verification-table-wrap"><table className="verification-table"><thead><tr><th>Action</th><th>Actor role</th><th>Result</th><th>Transaction</th><th>Failed at</th></tr></thead><tbody>
+                      {lifecycleDetail.failedOperations.map((item) => <tr key={item.transactionHash}><td>{item.action}</td><td>{item.actorRole}</td><td>{item.failureCode || "FAILED"}</td><td className="type-mono">{item.transactionHash}</td><td>{item.failedAt ? new Date(item.failedAt).toLocaleString() : "—"}</td></tr>)}
+                    </tbody></table></div>
+                  ) : <div className="dashboard-state">No reverted lifecycle transactions are recorded for this product.</div>}
+                  <h3 className="lifecycle-admin-subheading">Transactions requiring reconciliation review</h3>
+                  {lifecycleDetail.reviewRequiredOperations?.length ? (
+                    <div className="verification-table-wrap"><table className="verification-table"><thead><tr><th>Action</th><th>Actor role</th><th>Review reason</th><th>Transaction</th><th>Reported</th></tr></thead><tbody>
+                      {lifecycleDetail.reviewRequiredOperations.map((item) => <tr key={item.transactionHash}><td>{item.action}</td><td>{item.actorRole}</td><td>{item.reviewReason || item.failureCode || "REVIEW_REQUIRED"}</td><td className="type-mono">{item.transactionHash}</td><td>{item.reviewRequiredAt ? new Date(item.reviewRequiredAt).toLocaleString() : "—"}</td></tr>)}
+                    </tbody></table></div>
+                  ) : <div className="dashboard-state">No lifecycle transaction currently requires reconciliation review.</div>}
+                  <h3 className="lifecycle-admin-subheading">Stored verification and AI assessments</h3>
+                  {lifecycleDetail.verifications?.length ? (
+                    <div className="verification-table-wrap"><table className="verification-table"><thead><tr><th>Type</th><th>Authenticity result</th><th>AI scoring state</th><th>Risk score</th><th>Recorded</th></tr></thead><tbody>
+                      {lifecycleDetail.verifications.map((item) => <tr key={item._id || `${item.verificationType}:${item.createdAt}`}><td>{item.verificationType}</td><td>{item.status}</td><td>{item.scoringStatus || "NOT_APPLICABLE"}</td><td>{Number.isFinite(item.anomalyScore) ? item.anomalyScore : "—"}</td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString() : "—"}</td></tr>)}
+                    </tbody></table></div>
+                  ) : <div className="dashboard-state">No verification records are stored for this product.</div>}
+                  <div className="page-controls"><span>Lifecycle events: {lifecycleDetail.pagination?.lifecycleTotal ?? "—"} · Failed attempts: {lifecycleDetail.pagination?.failureTotal ?? "—"} · Review required: {lifecycleDetail.pagination?.reviewRequiredTotal ?? "—"} · Verifications: {lifecycleDetail.pagination?.verificationTotal ?? "—"}</span><div><button type="button" className="secondary-button" disabled={lifecycleDetailPage <= 1 || lifecycleDetailLoading} onClick={() => loadLifecycleDetail(lifecycleProductCode, lifecycleDetailPage - 1)}>Previous</button><button type="button" className="secondary-button" disabled={lifecycleDetailPage >= (lifecycleDetail.pagination?.totalPages || 1) || lifecycleDetailLoading} onClick={() => loadLifecycleDetail(lifecycleProductCode, lifecycleDetailPage + 1)}>Next</button></div></div>
+                </>
+              )}
+            </section>
           )}
 
         </div>
@@ -1845,12 +1941,11 @@ const deactivatedProducts =
           <div>
 
             <h1>
-              Counterfeit Activity
+              Risk & Integrity Activity
             </h1>
 
             <p>
-              Real suspicious and counterfeit
-              verification activity.
+              Stored FAKE and SUSPICIOUS outcomes. Suspicious results are review signals, not confirmed fraud.
             </p>
 
           </div>
@@ -1868,18 +1963,18 @@ const deactivatedProducts =
         <div className="monitor-grid">
 
           <MonitorCard
-            title="Total Detected"
+            title="Review signals"
             value={
               stats.fakeScans +
               stats.suspiciousScans
             }
-            change="Live"
+            change="FAKE + SUSPICIOUS outcomes"
             icon="alert"
             danger
           />
 
           <MonitorCard
-            title="Fake"
+            title="FAKE outcomes"
             value={stats.fakeScans}
             change="Verification records"
             icon="alert"
@@ -1887,22 +1982,16 @@ const deactivatedProducts =
           />
 
           <MonitorCard
-            title="Suspicious"
+            title="SUSPICIOUS outcomes"
             value={stats.suspiciousScans}
             change="Verification records"
             icon="shield"
           />
 
           <MonitorCard
-            title="Image Checks"
-            value={
-              recentVerifications.filter(
-                (item) =>
-                  item.verificationType ===
-                  "IMAGE"
-              ).length
-            }
-            change="Recent records"
+            title="Image verifications"
+            value={stats.imageVerifications}
+            change="All stored image records"
             icon="box"
           />
 
@@ -1914,7 +2003,7 @@ const deactivatedProducts =
           <div className="card-header">
 
             <h2>
-              Recent Counterfeit Activity
+              Recent Review and Integrity Events
             </h2>
 
             <span className="danger-badge">
@@ -1936,12 +2025,11 @@ const deactivatedProducts =
               </div>
 
               <h2>
-                No Counterfeit Activity
+                No Review or Integrity Events
               </h2>
 
               <p>
-                No fake or suspicious verification
-                records have been detected.
+                No FAKE or SUSPICIOUS outcomes appear on this page.
               </p>
 
             </div>
@@ -1974,7 +2062,7 @@ const deactivatedProducts =
 
                       <strong>
 
-                        {verification.productId
+                {verification.product
                           ?.productName ||
                           "Unknown Product"}
 
@@ -1982,13 +2070,13 @@ const deactivatedProducts =
 
                       <span>
 
-                        {verification.productCode}
+                        <span className="type-mono">{verification.productCode}</span>
                         {" • "}
                         {verification.verificationType}
 
                       </span>
 
-                      <small>
+                      <small className="type-mono">
 
                         {formatDate(
                           verification.createdAt
@@ -2001,9 +2089,8 @@ const deactivatedProducts =
 
                     <span className="danger-text">
 
-                      {statusLabel(
-                        verification.status
-                      )}
+                      <VerificationOutcomeBadge status={verification.status} />
+                      <ScoringStatusBadge verification={verification} />
 
                     </span>
 
@@ -2016,11 +2103,80 @@ const deactivatedProducts =
 
           )}
 
+          <PageControls
+            page={dashboardData.pagination?.alerts?.page || 1}
+            totalPages={dashboardData.pagination?.alerts?.totalPages || 0}
+            total={dashboardData.pagination?.alerts?.total || 0}
+            onPageChange={(page) => changeDashboardPage("alerts", page)}
+            disabled={loading}
+          />
+
         </div>
 
       </div>
     );
   };
+
+  const renderVerifications = () => (
+    <section className="inner-page admin-verifications-page">
+      <div className="inner-page-header">
+        <div>
+          <h1>Verification event log</h1>
+          <p>Stored product-authenticity outcomes and AI scan-risk assessments are shown separately.</p>
+        </div>
+        <button className="primary-button" onClick={() => loadVerificationRecords(verificationFilters, verificationPage)} disabled={verificationLoading}>
+          {verificationLoading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      <form className="verification-filters dashboard-card" onSubmit={(event) => { event.preventDefault(); applyVerificationFilters(); }}>
+        <label>Method
+          <select value={verificationFilters.type} onChange={(event) => setVerificationFilters({ ...verificationFilters, type: event.target.value })}>
+            <option value="">All methods</option><option value="QR">QR</option><option value="MANUAL_CODE">Manual code</option><option value="IMAGE">Image</option>
+          </select>
+        </label>
+        <label>Stored outcome
+          <select value={verificationFilters.status} onChange={(event) => setVerificationFilters({ ...verificationFilters, status: event.target.value })}>
+            <option value="">All outcomes</option>
+            {["GENUINE", "SUSPICIOUS", "FAKE", "AI_UNAVAILABLE", "NOT_REGISTERED", "DEACTIVATED", "FLAGGED", "INVALID_QR", "INVALID_PRODUCT_CODE", "REGISTRY_UNAVAILABLE", "REGISTRY_UNRESOLVED"].map((value) => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+        <label>AI assessment
+          <select value={verificationFilters.scoringStatus} onChange={(event) => setVerificationFilters({ ...verificationFilters, scoringStatus: event.target.value })}>
+            <option value="">All scoring states</option>
+            {["SCORED", "INSUFFICIENT_DATA", "UNAVAILABLE", "NOT_APPLICABLE"].map((value) => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+        <label>Product code
+          <input maxLength={64} value={verificationFilters.productCode} onChange={(event) => setVerificationFilters({ ...verificationFilters, productCode: event.target.value })} placeholder="Exact product code" />
+        </label>
+        <button className="primary-button" type="submit" disabled={verificationLoading}>Apply filters</button>
+      </form>
+
+      <section className="dashboard-card full-card verification-log-card" aria-live="polite" aria-busy={verificationLoading}>
+        <div className="card-header"><div><h2>Verification records</h2><p className="card-subtitle">{displayMetric(verificationPagination.total)} records · newest first</p></div></div>
+        {verificationLoading ? <div className="dashboard-state" role="status">Loading verification records…</div> : null}
+        {!verificationLoading && verificationError ? <div className="dashboard-state dashboard-state-error" role="alert"><span>{verificationError}</span><button className="secondary-button" onClick={() => loadVerificationRecords(verificationFilters, verificationPage)}>Try again</button></div> : null}
+        {!verificationLoading && !verificationError && verificationRows.length === 0 ? <div className="dashboard-state" role="status"><strong>No matching verification records</strong><span>Try another filter or clear the product code.</span></div> : null}
+        {!verificationLoading && !verificationError && verificationRows.length > 0 ? (
+          <div className="management-table verification-table-wrap"><table className="verification-table">
+            <thead><tr><th>Product</th><th>Method</th><th>Stored authenticity result</th><th>AI scan-risk assessment</th><th>Recorded</th></tr></thead>
+            <tbody>{verificationRows.map((verification) => (
+              <tr key={verification._id}>
+                <td><strong>{verification.product?.productName || "Product details unavailable"}</strong><span className="type-mono">{verification.productCode}</span>{verification.product?.brandName ? <small>{verification.product.brandName}</small> : null}</td>
+                <td>{verification.verificationType}</td>
+                <td><VerificationOutcomeBadge status={verification.status} />{Number.isFinite(verification.similarity) ? <small>Image similarity: {verification.similarity}</small> : null}</td>
+                <td><ScoringStatusBadge verification={verification} />{verification.scoringStatus === "SCORED" && Number.isFinite(verification.anomalyScore) ? <small>Score: <span className="type-mono">{verification.anomalyScore}</span>{verification.isSuspicious === true ? " · model flagged" : verification.isSuspicious === false ? " · model did not flag" : ""}</small> : null}</td>
+                <td className="type-mono">{formatDate(verification.createdAt)}</td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        ) : null}
+        {!verificationLoading && !verificationError ? <PageControls page={verificationPagination.page} totalPages={verificationPagination.totalPages} total={verificationPagination.total} onPageChange={(page) => loadVerificationRecords(verificationFilters, page)} disabled={verificationLoading} /> : null}
+        <p className="assessment-separation-note">Location and partner attribution are unavailable in the current scan schema and are not inferred from anonymous consumer checks.</p>
+      </section>
+    </section>
+  );
 
 
   // =====================================================
@@ -2037,18 +2193,17 @@ const deactivatedProducts =
           <div>
 
             <h1>
-              Fraud Alerts
+              Security Events
             </h1>
 
             <p>
-              Alerts generated from actual
-              suspicious and fake verifications.
+              Stored review and integrity events. AI scoring availability is shown separately.
             </p>
 
           </div>
 
           <div className="alert-count">
-            {alerts.length} Active Alerts
+            {displayMetric(dashboardData.pagination?.alerts?.total)} Events
           </div>
 
         </div>
@@ -2068,12 +2223,11 @@ const deactivatedProducts =
               </div>
 
               <h2>
-                No Active Alerts
+                No Security Events
               </h2>
 
               <p>
-                No suspicious or fake verification
-                activity has been recorded.
+                No matching integrity or review events have been recorded on this page.
               </p>
 
             </div>
@@ -2103,33 +2257,33 @@ const deactivatedProducts =
                     <div className="full-alert-info">
 
                       <h3>
-                        {alert.status ===
-                        "FAKE"
-                          ? "Counterfeit Product Detected"
-                          : "Suspicious Product Detected"}
+                        {alert.status.replaceAll("_", " ")} · {alert.verificationType} verification
                       </h3>
 
                       <p>
                         Product:{" "}
-                        {alert.productId
+                        {alert.product
                           ?.productName ||
                           "Unknown Product"}
                       </p>
 
                       <p>
                         Code:{" "}
-                        {alert.productCode}
+                        <span className="type-mono">{alert.productCode}</span>
                       </p>
 
                       <p>
                         Type:{" "}
                         {alert.verificationType}
                       </p>
+                      <VerificationOutcomeBadge status={alert.status} />
+                      <ScoringStatusBadge verification={alert} />
+                      {alert.product?.transactionHash ? <p>Saved transaction reference: <span className="type-mono">{`${alert.product.transactionHash.slice(0, 10)}…${alert.product.transactionHash.slice(-6)}`}</span> (not a live chain check)</p> : null}
 
                     </div>
 
 
-                    <span>
+                    <span className="type-mono">
                       {formatDate(
                         alert.createdAt
                       )}
@@ -2144,6 +2298,14 @@ const deactivatedProducts =
 
           )}
 
+          <PageControls
+            page={dashboardData.pagination?.alerts?.page || 1}
+            totalPages={dashboardData.pagination?.alerts?.totalPages || 0}
+            total={dashboardData.pagination?.alerts?.total || 0}
+            onPageChange={(page) => changeDashboardPage("alerts", page)}
+            disabled={loading}
+          />
+
         </div>
 
       </div>
@@ -2156,6 +2318,27 @@ const deactivatedProducts =
   // =====================================================
 
   const renderLocations = () => {
+
+    if (!locations.length) {
+      return (
+        <div className="inner-page">
+          <div className="inner-page-header">
+            <div>
+              <h1>Location insights</h1>
+              <p>Only scans with recorded consent and valid coordinates can appear here.</p>
+            </div>
+          </div>
+          <section className="dashboard-card location-privacy-state" role="status">
+            <span className="location-privacy-icon" aria-hidden="true">⌖</span>
+            <div>
+              <h2>No consented scan locations yet</h2>
+              <p>{dashboardData.locationDataAvailability?.reason || "No eligible scan locations are available."}</p>
+              <p>Location sharing is optional. Existing coordinates without a consent record remain excluded.</p>
+            </div>
+          </section>
+        </div>
+      );
+    }
 
     return (
       <div className="inner-page">
@@ -2434,11 +2617,11 @@ const deactivatedProducts =
         <div className="monitor-grid">
 
           <MonitorCard
-            title="Registered On Blockchain"
+            title="Saved product records"
             value={
               blockchainRecords.length
             }
-            change="Live"
+            change="MongoDB transaction references"
             icon="blockchain"
           />
 
@@ -2461,11 +2644,10 @@ const deactivatedProducts =
           />
 
           <MonitorCard
-            title="Network Status"
-            value="Connected"
-            change="Application online"
+            title="Live chain status"
+            value="Not checked"
+            change="This page does not query Sepolia"
             icon="check"
-            green
           />
 
         </div>
@@ -2476,11 +2658,11 @@ const deactivatedProducts =
           <div className="card-header">
 
             <h2>
-              Product Blockchain Records
+              Stored product registration references
             </h2>
 
             <span className="secure-badge">
-              Blockchain Data
+              MongoDB · chain not checked
             </span>
 
           </div>
@@ -2532,7 +2714,7 @@ const deactivatedProducts =
 
                     <div className="block-full-info">
 
-                      <strong>
+                      <strong className="type-mono">
                         {record.productCode}
                       </strong>
 
@@ -2549,7 +2731,7 @@ const deactivatedProducts =
 
                     <div className="block-full-transactions">
 
-                      <strong>
+                      <strong className="type-mono">
                         {record.blockchainHash
                           ? `${record.blockchainHash.slice(
                               0,
@@ -2619,7 +2801,13 @@ const deactivatedProducts =
 
     {
       key: "manufacturers",
-      label: "Manufacturer Management",
+      label: "Manufacturers",
+      icon: "users"
+    },
+
+    {
+      key: "partners",
+      label: "Partner Applications",
       icon: "users"
     },
 
@@ -2630,14 +2818,20 @@ const deactivatedProducts =
     },
 
     {
+      key: "verifications",
+      label: "Verification Log",
+      icon: "shield"
+    },
+
+    {
       key: "counterfeit",
-      label: "Counterfeit Activity",
+      label: "Risk & Integrity",
       icon: "shield"
     },
 
     {
       key: "alerts",
-      label: "Fraud Alerts",
+      label: "Security Events",
       icon: "bell"
     },
 
@@ -2660,7 +2854,136 @@ const deactivatedProducts =
   // RENDER PAGE
   // =====================================================
 
+  const renderPartnerApplications = () => {
+    const distributorApplications = pendingPartners.filter(
+      (partner) => partner.partnerType === "DISTRIBUTOR"
+    );
+    const retailerApplications = pendingPartners.filter(
+      (partner) => partner.partnerType === "RETAILER"
+    );
+
+    const renderPartnerTable = (partners, partnerType) => (
+      <section className="dashboard-card full-card partner-approval-card" key={partnerType}>
+        <div className="card-header">
+          <div>
+            <h2>{partnerType === "DISTRIBUTOR" ? "Distributor applications" : "Retailer applications"}</h2>
+            <p className="card-subtitle">{partners.length} pending review</p>
+          </div>
+        </div>
+
+        {partners.length === 0 ? (
+          <div className="partner-role-empty">No pending {partnerType.toLowerCase()} applications.</div>
+        ) : (
+          <div className="management-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Applicant</th>
+                  <th>Company</th>
+                  <th>Registration</th>
+                  <th>Contact</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {partners.map((partner) => {
+                  const busy = partnerActionId.startsWith(`${partner._id}:`);
+                  return (
+                    <tr key={partner._id}>
+                      <td>
+                        <div className="partner-applicant-cell">
+                          <strong>{partner.userId?.name || "Name unavailable"}</strong>
+                          <small>{partner.userId?.email || "Email unavailable"}</small>
+                        </div>
+                      </td>
+                      <td>{partner.companyName}</td>
+                      <td>{partner.registrationNumber}</td>
+                      <td>
+                        <div className="partner-applicant-cell">
+                          <span>{partner.contactNumber}</span>
+                          <small>{partner.address}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="partner-approval-actions">
+                          <button
+                            className="primary-button"
+                            type="button"
+                            disabled={Boolean(partnerActionId)}
+                            onClick={() => updatePartner(partner._id, "approve")}
+                          >
+                            {busy && partnerActionId.endsWith(":approve") ? "Approving…" : "Approve"}
+                          </button>
+                          <button
+                            className="delete-button"
+                            type="button"
+                            disabled={Boolean(partnerActionId)}
+                            onClick={() => updatePartner(partner._id, "reject")}
+                          >
+                            {busy && partnerActionId.endsWith(":reject") ? "Rejecting…" : "Reject"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    );
+
+    return (
+      <div className="inner-page">
+        <div className="inner-page-header">
+          <div>
+            <h1>Partner Applications</h1>
+            <p>Review distributor and retailer account requests.</p>
+          </div>
+          <button className="primary-button" type="button" onClick={loadPendingPartners} disabled={partnersLoading}>
+            {partnersLoading ? "Refreshing…" : "Refresh applications"}
+          </button>
+        </div>
+
+        <p className="partner-approval-note">
+          Admin approval activates the application account. It does not grant an on-chain contract role.
+        </p>
+
+        {partnersNotice && <p className="partner-approval-success" role="status">{partnersNotice}</p>}
+        {partnersError && <p className="partner-approval-error" role="alert">{partnersError}</p>}
+
+        {partnersLoading && pendingPartners.length === 0 ? (
+          <div className="dashboard-card partner-approval-state" role="status">Loading pending partner applications…</div>
+        ) : partnersError && pendingPartners.length === 0 ? (
+          <div className="dashboard-card partner-approval-state">
+            <p>Applications could not be loaded.</p>
+            <button className="primary-button" type="button" onClick={loadPendingPartners}>Try again</button>
+          </div>
+        ) : pendingPartners.length === 0 ? (
+          <div className="dashboard-card partner-approval-state" role="status">
+            <h2>No pending partner applications</h2>
+            <p>New distributor and retailer requests will appear here.</p>
+          </div>
+        ) : (
+          <div className="partner-approval-list" aria-busy={partnersLoading}>
+            {renderPartnerTable(distributorApplications, "DISTRIBUTOR")}
+            {renderPartnerTable(retailerApplications, "RETAILER")}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderPage = () => {
+
+    if (activePage === "partners") {
+      return renderPartnerApplications();
+    }
+
+    if (activePage === "verifications") {
+      return renderVerifications();
+    }
 
     if (loading) {
 
@@ -2724,8 +3047,14 @@ const deactivatedProducts =
       case "manufacturers":
         return renderManufacturers();
 
+      case "partners":
+        return renderPartnerApplications();
+
       case "products":
         return renderProducts();
+
+      case "verifications":
+        return renderVerifications();
 
       case "counterfeit":
         return renderCounterfeit();
@@ -2770,6 +3099,7 @@ const deactivatedProducts =
       {/* SIDEBAR */}
 
       <aside
+        id="admin-navigation"
         className={`admin-sidebar ${
           sidebarOpen
             ? "sidebar-open"
@@ -2825,6 +3155,7 @@ const deactivatedProducts =
                 onClick={() =>
                   navigate(item.key)
                 }
+                aria-current={activePage === item.key ? "page" : undefined}
               >
 
                 <Icon
@@ -2900,6 +3231,10 @@ const deactivatedProducts =
 
           <button
             className="mobile-menu-button"
+            type="button"
+            aria-label={sidebarOpen ? "Close navigation" : "Open navigation"}
+            aria-expanded={sidebarOpen}
+            aria-controls="admin-navigation"
             onClick={() =>
               setSidebarOpen(
                 !sidebarOpen
@@ -2913,6 +3248,11 @@ const deactivatedProducts =
             />
 
           </button>
+
+          <div className="topbar-brand" aria-label="Anti-Counterfeit security console">
+            <img src="/logo.png" alt="" />
+            <span>Anti-Counterfeit</span>
+          </div>
 
 
           {/* SEARCH */}
@@ -2928,7 +3268,7 @@ const deactivatedProducts =
 
               <input
                 type="text"
-                placeholder="Search anything..."
+                placeholder="Search pages and loaded records..."
                 value={searchText}
                 onChange={(e) =>
                   setSearchText(
@@ -3088,7 +3428,7 @@ const deactivatedProducts =
 
                             </strong>
 
-                            <span>
+                            <span className="type-mono">
                               {
                                 alert.productCode
                               }
@@ -3121,7 +3461,10 @@ const deactivatedProducts =
             {/* SETTINGS */}
 
             <button
-              className="icon-button"
+              className="icon-button topbar-settings-button"
+              type="button"
+              aria-label="Settings"
+              title="Settings"
               onClick={() =>
                 showToast(
                   "Settings panel coming soon."
@@ -3129,10 +3472,7 @@ const deactivatedProducts =
               }
             >
 
-              <Icon
-                type="settings"
-                size={22}
-              />
+              <SettingsIcon size={20} strokeWidth={2} aria-hidden="true" />
 
             </button>
 
@@ -3227,8 +3567,9 @@ const deactivatedProducts =
         {/* CONTENT */}
 
         <main className="admin-content">
-
-          {renderPage()}
+          <div className="admin-page-container">
+            {renderPage()}
+          </div>
 
         </main>
 
@@ -3275,7 +3616,7 @@ function LiveChart({ data }) {
       ...data.flatMap(
         (item) => [
           item.genuine,
-          item.counterfeit
+          item.risk
         ]
       )
     );
@@ -3380,7 +3721,7 @@ function LiveChart({ data }) {
           />
 
           <polyline
-            points={makePoints("counterfeit")}
+            points={makePoints("risk")}
             fill="none"
             stroke="#ef3d3d"
             strokeWidth="3"
@@ -3410,6 +3751,26 @@ function LiveChart({ data }) {
     </div>
 
   );
+}
+
+function VerificationOutcomeBadge({ status }) {
+  const value = status || "UNKNOWN";
+  const className = value === "GENUINE" ? "outcome-genuine" : ["FAKE", "INVALID_QR", "FLAGGED", "DEACTIVATED"].includes(value) ? "outcome-critical" : "outcome-review";
+  return <span className={`assessment-badge ${className}`}>{value.replaceAll("_", " ")}</span>;
+}
+
+function ScoringStatusBadge({ verification }) {
+  const value = verification.scoringStatus || "NOT RECORDED";
+  const className = value === "SCORED" ? (verification.isSuspicious === true ? "scoring-flagged" : "scoring-complete") : value === "UNAVAILABLE" ? "scoring-unavailable" : value === "INSUFFICIENT_DATA" ? "scoring-insufficient" : "scoring-na";
+  return <span className={`assessment-badge ${className}`}>{value.replaceAll("_", " ")}</span>;
+}
+
+function PageControls({ page = 1, totalPages = 0, total = 0, onPageChange, disabled = false }) {
+  if (totalPages <= 1) return <div className="page-controls-summary">{total ? `${total.toLocaleString()} records` : ""}</div>;
+  return <div className="page-controls" aria-label="Pagination">
+    <span>Page {page} of {totalPages} · {total.toLocaleString()} records</span>
+    <div><button type="button" className="secondary-button" onClick={() => onPageChange(page - 1)} disabled={disabled || page <= 1}>Previous</button><button type="button" className="secondary-button" onClick={() => onPageChange(page + 1)} disabled={disabled || page >= totalPages}>Next</button></div>
+  </div>;
 }
 
 

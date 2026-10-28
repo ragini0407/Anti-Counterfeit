@@ -1,145 +1,467 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("ProductRegistry", function () {
-  let ProductRegistry, registry, admin, manufacturer, otherManufacturer, stranger;
-
-  const PRODUCT_ID = "PROD-0001";
-  const PRODUCT_HASH = "0x" + "a".repeat(64);
+  let contract;
+  let admin;
+  let manufacturer;
+  let distributor;
+  let retailer;
+  let consumer;
 
   beforeEach(async function () {
-    [admin, manufacturer, otherManufacturer, stranger] = await ethers.getSigners();
-    ProductRegistry = await ethers.getContractFactory("ProductRegistry");
-    registry = await ProductRegistry.deploy();
-    await registry.waitForDeployment();
+    [admin, manufacturer, distributor, retailer, consumer] =
+      await ethers.getSigners();
+
+    const ProductRegistry =
+      await ethers.getContractFactory("ProductRegistry");
+    contract = await ProductRegistry.deploy();
+    await contract.waitForDeployment();
+
+    // Request and approve all roles
+    await contract
+      .connect(manufacturer)
+      .requestRole(1, "ABC Pharma");
+    await contract.approveRole(manufacturer.address);
+
+    await contract
+      .connect(distributor)
+      .requestRole(2, "XYZ Logistics");
+    await contract.approveRole(distributor.address);
+
+    await contract
+      .connect(retailer)
+      .requestRole(3, "PQR Store");
+    await contract.approveRole(retailer.address);
   });
 
-  describe("Admin & manufacturer approval", function () {
-    it("sets deployer as admin", async function () {
-      expect(await registry.admin()).to.equal(admin.address);
+  // ── Role Management Tests ──────────────────────────────
+  describe("Role Management", function () {
+
+    it("Should set deployer as admin", async function () {
+      expect(await contract.admin()).to.equal(admin.address);
     });
 
-    it("allows admin to approve a manufacturer", async function () {
-      await expect(registry.approveManufacturer(manufacturer.address))
-        .to.emit(registry, "ManufacturerApproved")
-        .withArgs(manufacturer.address);
-      expect(await registry.approvedManufacturers(manufacturer.address)).to.equal(true);
+    it("Should approve manufacturer role", async function () {
+      expect(await contract.getRole(manufacturer.address))
+        .to.equal(1);
     });
 
-    it("rejects approval attempts from non-admin", async function () {
-      await expect(
-        registry.connect(stranger).approveManufacturer(manufacturer.address)
-      ).to.be.revertedWith("ProductRegistry: caller is not admin");
+    it("Should approve distributor role", async function () {
+      expect(await contract.getRole(distributor.address))
+        .to.equal(2);
     });
 
-    it("allows admin to revoke a manufacturer", async function () {
-      await registry.approveManufacturer(manufacturer.address);
-      await registry.revokeManufacturer(manufacturer.address);
-      expect(await registry.approvedManufacturers(manufacturer.address)).to.equal(false);
+    it("Should approve retailer role", async function () {
+      expect(await contract.getRole(retailer.address))
+        .to.equal(3);
     });
+
+    it("Should revoke a role", async function () {
+      await contract.revokeRole(manufacturer.address);
+      expect(await contract.getRole(manufacturer.address))
+        .to.equal(0);
+    });
+
+    it("Should reject role request from non-admin",
+      async function () {
+        await expect(
+          contract
+            .connect(consumer)
+            .approveRole(consumer.address)
+        ).to.be.revertedWith("Only admin");
+      }
+    );
+
+    it("Should reject duplicate role request",
+      async function () {
+        await expect(
+          contract
+            .connect(manufacturer)
+            .requestRole(1, "Another Company")
+        ).to.be.revertedWith("Already has a role");
+      }
+    );
   });
 
-  describe("Product registration", function () {
+  // ── Product Lifecycle Tests ────────────────────────────
+  describe("Product Lifecycle", function () {
+    const productId = "PROD-2026-TEST01";
+    const mfrId     = "MFR-0001";
+    const hash      = "abc123hash456";
+    const ipfsHash  = "QmTest123";
+
     beforeEach(async function () {
-      await registry.approveManufacturer(manufacturer.address);
+      // Mint product with authorized distributor and retailer
+      await contract
+        .connect(manufacturer)
+        .mintProduct(
+          productId,
+          mfrId,
+          hash,
+          ipfsHash,
+          distributor.address,
+          retailer.address
+        );
     });
 
-    it("allows an approved manufacturer to register a product", async function () {
-      await expect(
-        registry.connect(manufacturer).registerProduct(PRODUCT_ID, PRODUCT_HASH)
-      )
-        .to.emit(registry, "ProductRegistered")
-        .withArgs(PRODUCT_ID, manufacturer.address, PRODUCT_HASH, anyValue);
-    });
+    // ── Minting ──────────────────────────────────────────
+    it("Should mint product in MINTED state",
+      async function () {
+        const state = await contract.getProductState(productId);
+        expect(state).to.equal(0); // MINTED
+      }
+    );
 
-    it("rejects registration from a non-approved manufacturer", async function () {
-      await expect(
-        registry.connect(otherManufacturer).registerProduct(PRODUCT_ID, PRODUCT_HASH)
-      ).to.be.revertedWith("ProductRegistry: manufacturer not approved");
-    });
+    it("Should reject duplicate product ID",
+      async function () {
+        await expect(
+          contract
+            .connect(manufacturer)
+            .mintProduct(
+              productId, mfrId, hash, ipfsHash,
+              distributor.address, retailer.address
+            )
+        ).to.be.revertedWith("Product already minted");
+      }
+    );
 
-    it("rejects an empty productId", async function () {
-      await expect(
-        registry.connect(manufacturer).registerProduct("", PRODUCT_HASH)
-      ).to.be.revertedWith("ProductRegistry: empty productId");
-    });
+    it("Should reject mint from non-manufacturer",
+      async function () {
+        await expect(
+          contract
+            .connect(consumer)
+            .mintProduct(
+              "PROD-999", mfrId, hash, ipfsHash,
+              distributor.address, retailer.address
+            )
+        ).to.be.revertedWith("Only manufacturer");
+      }
+    );
 
-    it("rejects duplicate product registration", async function () {
-      await registry.connect(manufacturer).registerProduct(PRODUCT_ID, PRODUCT_HASH);
-      await expect(
-        registry.connect(manufacturer).registerProduct(PRODUCT_ID, PRODUCT_HASH)
-      ).to.be.revertedWith("ProductRegistry: product already registered");
-    });
+    it("Should reject mint with invalid distributor",
+      async function () {
+        await expect(
+          contract
+            .connect(manufacturer)
+            .mintProduct(
+              "PROD-NEW-001", mfrId, hash, ipfsHash,
+              consumer.address,  // consumer is not a distributor
+              retailer.address
+            )
+        ).to.be.revertedWith("Invalid distributor address");
+      }
+    );
+
+    it("Should reject mint with invalid retailer",
+      async function () {
+        await expect(
+          contract
+            .connect(manufacturer)
+            .mintProduct(
+              "PROD-NEW-002", mfrId, hash, ipfsHash,
+              distributor.address,
+              consumer.address  // consumer is not a retailer
+            )
+        ).to.be.revertedWith("Invalid retailer address");
+      }
+    );
+
+    // ── Distributor ───────────────────────────────────────
+    it("Authorized distributor should update to IN_TRANSIT",
+      async function () {
+        await contract
+          .connect(distributor)
+          .transferCustody(productId);
+        const state = await contract.getProductState(productId);
+        expect(state).to.equal(1); // IN_TRANSIT
+      }
+    );
+
+    it("Should reject transferCustody from non-distributor",
+      async function () {
+        await expect(
+          contract
+            .connect(consumer)
+            .transferCustody(productId)
+        ).to.be.revertedWith("Only distributor");
+      }
+    );
+
+    it("Should reject transferCustody from wrong distributor",
+      async function () {
+        // Create another distributor
+        const [,,,,,, anotherDistributor] =
+          await ethers.getSigners();
+        await contract
+          .connect(anotherDistributor)
+          .requestRole(2, "Another Logistics");
+        await contract.approveRole(anotherDistributor.address);
+
+        // Wrong distributor tries to take custody
+        await expect(
+          contract
+            .connect(anotherDistributor)
+            .transferCustody(productId)
+        ).to.be.revertedWith(
+          "Not authorized distributor for this product"
+        );
+      }
+    );
+
+    // ── Retailer ──────────────────────────────────────────
+    it("Authorized retailer should mark RECEIVED_BY_RETAILER",
+      async function () {
+        await contract
+          .connect(distributor)
+          .transferCustody(productId);
+        await contract
+          .connect(retailer)
+          .receiveAtRetail(productId);
+        const state = await contract.getProductState(productId);
+        expect(state).to.equal(2); // RECEIVED_BY_RETAILER
+      }
+    );
+
+    it("Should reject receiveAtRetail from non-retailer",
+      async function () {
+        await contract
+          .connect(distributor)
+          .transferCustody(productId);
+        await expect(
+          contract
+            .connect(consumer)
+            .receiveAtRetail(productId)
+        ).to.be.revertedWith("Only retailer");
+      }
+    );
+
+    it("Should reject receiveAtRetail from wrong retailer",
+      async function () {
+        await contract
+          .connect(distributor)
+          .transferCustody(productId);
+
+        // Create another retailer
+        const [,,,,,,, anotherRetailer] =
+          await ethers.getSigners();
+        await contract
+          .connect(anotherRetailer)
+          .requestRole(3, "Another Store");
+        await contract.approveRole(anotherRetailer.address);
+
+        // Wrong retailer tries to receive
+        await expect(
+          contract
+            .connect(anotherRetailer)
+            .receiveAtRetail(productId)
+        ).to.be.revertedWith(
+          "Not authorized retailer for this product"
+        );
+      }
+    );
+
+    // ── Consumer Verification ─────────────────────────────
+    it("Backend verifyProduct should mark SOLD",
+      async function () {
+        await contract
+          .connect(distributor)
+          .transferCustody(productId);
+        await contract
+          .connect(retailer)
+          .receiveAtRetail(productId);
+
+        const result = await contract
+          .verifyProduct.staticCall(productId, hash);
+
+        expect(result[0]).to.equal(true);  // genuine
+        expect(result[1]).to.equal(false); // not already sold
+        expect(result[2]).to.equal(false); // not flagged
+        expect(result[3]).to.equal(3);     // state = SOLD
+      }
+    );
+
+    it("Should return alreadySold on second scan",
+      async function () {
+        await contract
+          .connect(distributor)
+          .transferCustody(productId);
+        await contract
+          .connect(retailer)
+          .receiveAtRetail(productId);
+
+        // First scan - marks SOLD
+        await contract.verifyProduct(productId, hash);
+
+        // Second scan - already sold
+        const result = await contract
+          .verifyProduct.staticCall(productId, hash);
+
+        expect(result[1]).to.equal(true); // alreadySold
+      }
+    );
+
+    // ── Fix #4 - Hash Mismatch → FLAGGED ─────────────────
+    it("Hash mismatch should flag product as counterfeit",
+      async function () {
+        await contract
+          .connect(distributor)
+          .transferCustody(productId);
+        await contract
+          .connect(retailer)
+          .receiveAtRetail(productId);
+
+        // Verify with WRONG hash
+        const result = await contract
+          .verifyProduct.staticCall(productId, "wronghash999");
+
+        expect(result[0]).to.equal(false); // not genuine
+        expect(result[2]).to.equal(true);  // flagged
+        expect(result[3]).to.equal(4);     // FLAGGED_COUNTERFEIT
+      }
+    );
+
+    it("Hash mismatch should change state to FLAGGED_COUNTERFEIT",
+      async function () {
+        await contract
+          .connect(distributor)
+          .transferCustody(productId);
+        await contract
+          .connect(retailer)
+          .receiveAtRetail(productId);
+
+        // Verify with wrong hash
+        await contract.verifyProduct(productId, "wronghash999");
+
+        // Check state changed
+        const state = await contract.getProductState(productId);
+        expect(state).to.equal(4); // FLAGGED_COUNTERFEIT
+      }
+    );
+
+    // ── Fix #11 - Counterfeit Flagging ────────────────────
+    it("Admin should flag product as counterfeit",
+      async function () {
+        await contract.flagCounterfeit(productId, "Fake detected");
+        const state = await contract.getProductState(productId);
+        expect(state).to.equal(4); // FLAGGED_COUNTERFEIT
+      }
+    );
+
+    it("Should reject flagging from non-admin",
+      async function () {
+        await expect(
+          contract
+            .connect(consumer)
+            .flagCounterfeit(productId, "test")
+        ).to.be.revertedWith("Only admin");
+      }
+    );
+
+    it("Should reject double flagging",
+      async function () {
+        await contract.flagCounterfeit(productId, "Fake");
+        await expect(
+          contract.flagCounterfeit(productId, "Fake again")
+        ).to.be.revertedWith("Already flagged");
+      }
+    );
+
+    it("Flagged product should remain flagged on rescan",
+      async function () {
+        await contract.flagCounterfeit(productId, "Fake");
+
+        // Try to verify flagged product
+        const result = await contract
+          .verifyProduct.staticCall(productId, hash);
+
+        expect(result[2]).to.equal(true); // still flagged
+        expect(result[3]).to.equal(4);    // still FLAGGED
+      }
+    );
   });
 
-  describe("Product retrieval & verification", function () {
-    beforeEach(async function () {
-      await registry.approveManufacturer(manufacturer.address);
-      await registry.connect(manufacturer).registerProduct(PRODUCT_ID, PRODUCT_HASH);
-    });
+  // ── View Function Tests ────────────────────────────────
+  describe("View Functions", function () {
 
-    it("returns correct product data via getProduct", async function () {
-      const result = await registry.getProduct(PRODUCT_ID);
-      expect(result[0]).to.equal(PRODUCT_ID);
-      expect(result[1]).to.equal(manufacturer.address);
-      expect(result[2]).to.equal(PRODUCT_HASH);
-      expect(result[4]).to.equal(1);
-    });
+    it("Should return correct product data",
+      async function () {
+        await contract
+          .connect(manufacturer)
+          .mintProduct(
+            "PROD-VIEW-01", "MFR-0001",
+            "testhash", "QmIPFS123",
+            distributor.address,
+            retailer.address
+          );
 
-    it("reverts when fetching a product that does not exist", async function () {
-      await expect(registry.getProduct("NON-EXISTENT")).to.be.revertedWith(
-        "ProductRegistry: product does not exist"
-      );
-    });
+        const product = await contract.getProduct("PROD-VIEW-01");
+        expect(product[0]).to.equal("PROD-VIEW-01"); // productId
+        expect(product[1]).to.equal("MFR-0001");     // mfrId
+        expect(product[2]).to.equal("testhash");     // hash
+        expect(product[3]).to.equal("QmIPFS123");    // ipfsHash
+        expect(product[5]).to.equal(0);              // MINTED
+        expect(product[7]).to.equal(                 // distributor
+          distributor.address
+        );
+        expect(product[8]).to.equal(                 // retailer
+          retailer.address
+        );
+      }
+    );
 
-    it("verifyProduct returns exists=true and hashMatches=true for a correct hash", async function () {
-      const [exists, hashMatches, isFlagged] = await registry.verifyProduct(
-        PRODUCT_ID,
-        PRODUCT_HASH
-      );
-      expect(exists).to.equal(true);
-      expect(hashMatches).to.equal(true);
-      expect(isFlagged).to.equal(false);
-    });
+    it("Should revert for non-existent product",
+      async function () {
+        await expect(
+          contract.getProduct("PROD-FAKE-999")
+        ).to.be.revertedWith("Product not found");
+      }
+    );
 
-    it("verifyProduct returns hashMatches=false for a tampered hash", async function () {
-      const wrongHash = "0x" + "b".repeat(64);
-      const [exists, hashMatches] = await registry.verifyProduct(PRODUCT_ID, wrongHash);
-      expect(exists).to.equal(true);
-      expect(hashMatches).to.equal(false);
-    });
+    it("Should return correct scan count",
+      async function () {
+        await contract
+          .connect(manufacturer)
+          .mintProduct(
+            "PROD-SCAN-01", "MFR-0001",
+            "hash123", "QmIPFS456",
+            distributor.address,
+            retailer.address
+          );
+        await contract
+          .connect(distributor)
+          .transferCustody("PROD-SCAN-01");
+        await contract
+          .connect(retailer)
+          .receiveAtRetail("PROD-SCAN-01");
 
-    it("verifyProduct returns exists=false for an unregistered product", async function () {
-      const [exists] = await registry.verifyProduct("GHOST-ID", PRODUCT_HASH);
-      expect(exists).to.equal(false);
-    });
-  });
+        // Two scans
+        await contract.verifyProduct("PROD-SCAN-01", "hash123");
+        await contract.verifyProduct("PROD-SCAN-01", "hash123");
 
-  describe("Flagging counterfeit/suspicious products", function () {
-    beforeEach(async function () {
-      await registry.approveManufacturer(manufacturer.address);
-      await registry.connect(manufacturer).registerProduct(PRODUCT_ID, PRODUCT_HASH);
-    });
+        const count = await contract.getScanCount("PROD-SCAN-01");
+        expect(count).to.equal(2);
+      }
+    );
 
-    it("allows admin to flag a product", async function () {
-      await expect(registry.flagProduct(PRODUCT_ID))
-        .to.emit(registry, "ProductFlagged")
-        .withArgs(PRODUCT_ID);
-      const [, , isFlagged] = await registry.verifyProduct(PRODUCT_ID, PRODUCT_HASH);
-      expect(isFlagged).to.equal(true);
-    });
-
-    it("rejects flagging from non-admin", async function () {
-      await expect(
-        registry.connect(stranger).flagProduct(PRODUCT_ID)
-      ).to.be.revertedWith("ProductRegistry: caller is not admin");
-    });
-
-    it("rejects flagging a product that doesn't exist", async function () {
-      await expect(registry.flagProduct("GHOST-ID")).to.be.revertedWith(
-        "ProductRegistry: product does not exist"
-      );
-    });
+    it("Should return true for flagged product",
+      async function () {
+        await contract
+          .connect(manufacturer)
+          .mintProduct(
+            "PROD-FLAG-01", "MFR-0001",
+            "hash456", "QmIPFS789",
+            distributor.address,
+            retailer.address
+          );
+        await contract.flagCounterfeit(
+          "PROD-FLAG-01", "Fake detected"
+        );
+        const flagged = await contract.isProductFlagged(
+          "PROD-FLAG-01"
+        );
+        expect(flagged).to.equal(true);
+      }
+    );
   });
 });

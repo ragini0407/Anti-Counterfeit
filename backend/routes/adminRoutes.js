@@ -4,7 +4,11 @@ const {
     getPendingManufacturers,
     approveManufacturer,
     rejectManufacturer,
-    getAdminDashboard
+    getPendingPartners,
+    approvePartner,
+    rejectPartner,
+    getAdminDashboard,
+    getAdminVerifications
 } = require("../controllers/adminController");
 
 const {
@@ -13,6 +17,7 @@ const {
 } = require("../middleware/authMiddleware");
 
 const router = express.Router();
+const { getAdminProductLifecycle } = require("../controllers/lifecycleController");
 
 
 // =====================================================
@@ -24,6 +29,20 @@ router.get(
     protect,
     authorizeRoles("ADMIN"),
     getAdminDashboard
+);
+
+router.get(
+    "/verifications",
+    protect,
+    authorizeRoles("ADMIN"),
+    getAdminVerifications
+);
+
+router.get(
+    "/products/:productCode/lifecycle",
+    protect,
+    authorizeRoles("ADMIN"),
+    getAdminProductLifecycle
 );
 
 
@@ -61,6 +80,39 @@ router.put(
     authorizeRoles("ADMIN"),
     rejectManufacturer
 );
+// =====================================================
+// PENDING DISTRIBUTORS / RETAILERS
+// =====================================================
 
+router.get(
+    "/partners/pending",
+    protect,
+    authorizeRoles("ADMIN"),
+    getPendingPartners
+);
+
+
+// =====================================================
+// APPROVE DISTRIBUTOR / RETAILER
+// =====================================================
+
+router.put(
+    "/partners/:id/approve",
+    protect,
+    authorizeRoles("ADMIN"),
+    approvePartner
+);
+
+
+// =====================================================
+// REJECT DISTRIBUTOR / RETAILER
+// =====================================================
+
+router.put(
+    "/partners/:id/reject",
+    protect,
+    authorizeRoles("ADMIN"),
+    rejectPartner
+);
 
 module.exports = router;

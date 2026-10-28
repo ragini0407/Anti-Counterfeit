@@ -7,17 +7,43 @@ Exposes:
 """
 
 import io
+import hmac
+import os
 from pathlib import Path
 
 import joblib
 import numpy as np
 import tensorflow as tf
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, Header, UploadFile, HTTPException
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 app = FastAPI(title="Anti-Counterfeit AI Service")
+
+
+def require_service_token(authorization: str | None = Header(default=None)):
+    """Fail closed unless the caller presents the configured backend token."""
+    expected_token = os.environ.get("AI_SERVICE_TOKEN", "")
+    if len(expected_token) < 32:
+        raise HTTPException(status_code=503, detail="AI service is disabled")
+    expected_header = f"Bearer {expected_token}"
+    if not authorization or not hmac.compare_digest(authorization, expected_header):
+        raise HTTPException(status_code=401, detail="AI service authentication required")
+
+
+@app.get("/health")
+def health(authorization: str | None = Header(default=None)):
+    try:
+        require_service_token(authorization)
+        authorized = True
+    except HTTPException:
+        authorized = False
+    return {
+        "status": "ok" if iso_forest is not None and authorized else "degraded",
+        "scan_scoring_model_loaded": iso_forest is not None,
+        "authenticated_calls_enabled": authorized,
+    }
 
 
 # --------------------------------------------------
@@ -64,7 +90,12 @@ def load_models():
 # --------------------------------------------------
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+):
+
+    require_service_token(authorization)
 
     if cnn_model is None:
         raise HTTPException(
@@ -125,13 +156,21 @@ async def predict(file: UploadFile = File(...)):
 # --------------------------------------------------
 
 class ScanEvent(BaseModel):
-    scan_count: int
-    distinct_locations: int
-    avg_time_between_scans_hr: float
+    scan_count: int = Field(ge=2)
+    distinct_locations: int = Field(ge=1)
+    avg_time_between_scans_hr: float = Field(gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def locations_cannot_exceed_scans(self):
+        if self.distinct_locations > self.scan_count:
+            raise ValueError("distinct_locations cannot exceed scan_count")
+        return self
 
 
 @app.post("/score")
-async def score(event: ScanEvent):
+async def score(event: ScanEvent, authorization: str | None = Header(default=None)):
+
+    require_service_token(authorization)
 
     if iso_forest is None:
         raise HTTPException(

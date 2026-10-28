@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { apiUrl } from "./api";
 import "./ConsumerDashboard.css";
 
 function ConsumerDashboard({ onLogout, onScanner }) {
@@ -34,7 +35,7 @@ function ConsumerDashboard({ onLogout, onScanner }) {
         setStatsLoading(true);
 
         const response = await fetch(
-          "http://localhost:5000/api/products/consumer-stats"
+          apiUrl("/products/consumer-stats")
         );
 
         const data = await response.json();

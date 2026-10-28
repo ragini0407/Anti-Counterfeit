@@ -8,10 +8,21 @@ const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const productRoutes = require("./routes/productRoutes");
+const { checkAiService } = require("./services/aiService");
+const {
+    createCorsOptions,
+    parseTrustProxySetting,
+    corsErrorHandler
+} = require("./config/cors");
 
 const app = express();
 
-app.use(cors());
+const trustProxySetting = parseTrustProxySetting();
+if (trustProxySetting !== false) {
+    app.set("trust proxy", trustProxySetting);
+}
+
+app.use(cors(createCorsOptions()));
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 
@@ -27,8 +38,23 @@ app.get("/", (req, res) => {
     });
 });
 
+app.get("/api/health/ai", async (req, res) => {
+    const health = await checkAiService();
+    const ready = health.available && health.scanScoringModelLoaded;
+    return res.status(ready ? 200 : 503).json({
+        status: ready ? "available" : "unavailable",
+        scanScoringModelLoaded: health.scanScoringModelLoaded
+    });
+});
+
+app.use(corsErrorHandler);
+
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
+
+module.exports = app;

@@ -657,6 +657,11 @@ button {
   background: #e4faee;
 }
 
+.status.registered {
+  color: #315b6a;
+  background: #eaf2f4;
+}
+
 /* =====================================================
    BUTTONS
 ===================================================== */
@@ -1497,3 +1502,4 @@ td {
     border-radius: 10px;
   }
 }
+.partner-list-error { margin: 7px 0 0; color: #a33a3a; font-size: 12px; line-height: 1.45; }
