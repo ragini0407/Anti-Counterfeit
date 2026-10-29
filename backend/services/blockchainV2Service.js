@@ -1,5 +1,10 @@
 const { ethers } = require("ethers");
 const path = require("path");
+const {
+    PARTNER_DIAGNOSTIC_STAGES,
+    withPartnerDiagnosticStage,
+    createPartnerDiagnosticError
+} = require("./partnerDiagnostic");
 
 const artifact = require(
     path.join(__dirname, "../../blockchain/artifacts/contracts/ProductRegistryV2.sol/ProductRegistryV2.json")
@@ -24,17 +29,37 @@ const getContract = (address = CONTRACT_ADDRESS) => {
 
 const assertSepolia = async (address = CONTRACT_ADDRESS) => {
     if (!CONTRACT_ADDRESS || !address || ethers.getAddress(address) !== CONTRACT_ADDRESS || !process.env.BLOCKCHAIN_RPC_URL) {
-        throw new Error("Sepolia ProductRegistry V2 configuration is incomplete");
+        throw createPartnerDiagnosticError(
+            PARTNER_DIAGNOSTIC_STAGES.V2_CONFIGURATION,
+            "Sepolia ProductRegistry V2 configuration is incomplete"
+        );
     }
     if (configuredChainId !== SEPOLIA_CHAIN_ID) {
-        throw new Error("Backend CHAIN_ID must be 11155111 (Sepolia)");
+        throw createPartnerDiagnosticError(
+            PARTNER_DIAGNOSTIC_STAGES.V2_CONFIGURATION,
+            "Backend CHAIN_ID must be 11155111 (Sepolia)"
+        );
     }
-    const network = await provider.getNetwork();
+    const network = await withPartnerDiagnosticStage(
+        PARTNER_DIAGNOSTIC_STAGES.RPC_GET_NETWORK,
+        () => provider.getNetwork()
+    );
     if (network.chainId !== SEPOLIA_CHAIN_ID) {
-        throw new Error("Configured blockchain RPC is not connected to Sepolia");
+        throw createPartnerDiagnosticError(
+            PARTNER_DIAGNOSTIC_STAGES.V2_CONFIGURATION,
+            "Configured blockchain RPC is not connected to Sepolia"
+        );
     }
-    const code = await provider.getCode(address);
-    if (code === "0x") throw new Error("Configured ProductRegistry V2 has no deployed code on Sepolia");
+    const code = await withPartnerDiagnosticStage(
+        PARTNER_DIAGNOSTIC_STAGES.RPC_GET_CODE,
+        () => provider.getCode(address)
+    );
+    if (code === "0x") {
+        throw createPartnerDiagnosticError(
+            PARTNER_DIAGNOSTIC_STAGES.V2_CONFIGURATION,
+            "Configured ProductRegistry V2 has no deployed code on Sepolia"
+        );
+    }
 };
 
 const encodeMintProductData = ({
@@ -66,7 +91,10 @@ const prepareMintTransaction = async (args) => {
 
 const getRole = async (address) => {
     await assertSepolia();
-    return Number(await getContract().getRole(ethers.getAddress(address)));
+    return Number(await withPartnerDiagnosticStage(
+        PARTNER_DIAGNOSTIC_STAGES.CONTRACT_GET_ROLE,
+        () => getContract().getRole(ethers.getAddress(address))
+    ));
 };
 
 const waitForMintTransaction = async (transactionHash, timeoutMs = 120000) => {

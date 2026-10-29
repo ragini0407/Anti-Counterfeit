@@ -11,6 +11,10 @@ const SupplyChainPartner = require("../models/SupplyChainPartner");
 const Verification = require("../models/Verification");
 const blockchain = require("./blockchainService");
 const blockchainV2 = require("./blockchainV2Service");
+const {
+    PARTNER_DIAGNOSTIC_STAGES,
+    withPartnerDiagnosticStage
+} = require("./partnerDiagnostic");
 
 const IPFS_IMAGE_HASH = "";
 const FPD0025_DELEGATED_RECOVERY = Object.freeze({
@@ -868,10 +872,13 @@ const getApprovedPartners = async (type, overrides = {}) => {
         throw registrationError("Partner type must be DISTRIBUTOR or RETAILER");
     }
 
-    const partners = await deps.SupplyChainPartner.find({
-        partnerType: type,
-        verificationStatus: "VERIFIED"
-    }).populate("userId", "name status walletAddress walletVerifiedAt").sort({ companyName: 1 });
+    const partners = await withPartnerDiagnosticStage(
+        PARTNER_DIAGNOSTIC_STAGES.MONGODB_PARTNER_QUERY,
+        () => deps.SupplyChainPartner.find({
+            partnerType: type,
+            verificationStatus: "VERIFIED"
+        }).populate("userId", "name status walletAddress walletVerifiedAt").sort({ companyName: 1 })
+    );
 
     const eligible = [];
     for (const partner of partners) {

@@ -23,6 +23,7 @@ const blockchainService = require("../services/blockchainService");
 const blockchainV2Service = require("../services/blockchainV2Service");
 const { resolveProductRegistryIdentity } = require("../services/productRegistryIdentity");
 const productRegistrationService = require("../services/productRegistrationService");
+const { getPartnerDiagnosticLogFields } = require("../services/partnerDiagnostic");
 const qrVerificationService = require("../services/qrVerificationService");
 const { isSupportedCategory, compareImageHash } = require("../services/imageVerificationService");
 
@@ -796,7 +797,10 @@ const getApprovedPartners = async (req, res) => {
         );
         return res.status(200).json({ partners });
     } catch (error) {
-        console.error("Get authorized partners failed:", error.code || "application-error");
+        console.error(
+            "Get authorized partners failed:",
+            JSON.stringify(getPartnerDiagnosticLogFields(error))
+        );
         return res.status(error.statusCode || 503).json({
             message: error.statusCode
                 ? error.message
