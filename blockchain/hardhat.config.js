@@ -14,14 +14,18 @@ module.exports = {
       url: process.env.AMOY_RPC_URL ||
            "https://polygon-amoy-bor-rpc.publicnode.com",
       chainId: 80002,
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY],
+     accounts: process.env.DEPLOYER_PRIVATE_KEY
+  ? [process.env.DEPLOYER_PRIVATE_KEY]
+  : [],
       timeout: 120000,
     },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL ||
            "https://ethereum-sepolia-rpc.publicnode.com",
       chainId: 11155111,
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY],
+      accounts: process.env.DEPLOYER_PRIVATE_KEY
+  ? [process.env.DEPLOYER_PRIVATE_KEY]
+  : [],
       timeout: 120000,
     },
   },
