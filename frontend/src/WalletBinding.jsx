@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "./api";
+import { connectBoundWallet } from "./walletBindingClient";
 const SEPOLIA_CHAIN_ID = 11155111;
 
 function toHexMessage(message) {
@@ -122,6 +123,24 @@ function WalletBinding({ onBound }) {
     }
   };
 
+  const connectBoundWalletOnly = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const { address } = await connectBoundWallet({
+        ethereum: window.ethereum,
+        boundAddress: user.walletAddress,
+        onAccount: setWalletAccount,
+        onNetwork: setNetwork
+      });
+      setMessage(`MetaMask connected to the bound wallet on Sepolia: ${address}`);
+    } catch (error) {
+      setMessage(error.message || "MetaMask connection failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="wallet-card">
       <div className="wallet-card-heading">
@@ -151,6 +170,16 @@ function WalletBinding({ onBound }) {
             </div>
           </div>
           <div className="wallet-bind-action">
+            {!walletAccount && (
+              <button
+                type="button"
+                className="wallet-connect-button"
+                onClick={connectBoundWalletOnly}
+                disabled={busy}
+              >
+                {busy ? "Connecting MetaMask…" : "Connect MetaMask"}
+              </button>
+            )}
             <p>To replace this binding, confirm your account password and sign a fresh challenge with the new wallet in MetaMask.</p>
             <label htmlFor="wallet-rebind-password">Account password</label>
             <input
