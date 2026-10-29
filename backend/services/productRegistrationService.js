@@ -13,7 +13,9 @@ const blockchain = require("./blockchainService");
 const blockchainV2 = require("./blockchainV2Service");
 const {
     PARTNER_DIAGNOSTIC_STAGES,
-    withPartnerDiagnosticStage
+    withPartnerDiagnosticStage,
+    createPartnerDiagnosticError,
+    getPartnerDiagnosticLogFields
 } = require("./partnerDiagnostic");
 
 const IPFS_IMAGE_HASH = "";
@@ -866,47 +868,122 @@ const claimProductRegistrationMint = async ({ userId, registrationId }, override
     return publicRegistration(registration);
 };
 
-const getApprovedPartners = async (type, overrides = {}) => {
+const getApprovedPartners = async (type, overrides = {}, onDiagnostic) => {
     const deps = createDependencies(overrides);
     if (!["DISTRIBUTOR", "RETAILER"].includes(type)) {
         throw registrationError("Partner type must be DISTRIBUTOR or RETAILER");
     }
 
-    const partners = await withPartnerDiagnosticStage(
-        PARTNER_DIAGNOSTIC_STAGES.MONGODB_PARTNER_QUERY,
-        () => deps.SupplyChainPartner.find({
-            partnerType: type,
-            verificationStatus: "VERIFIED"
-        }).populate("userId", "name status walletAddress walletVerifiedAt").sort({ companyName: 1 })
-    );
+    const diagnostics = {
+        partnerType: type,
+        rpcStatus: "NOT_CHECKED",
+        stageCounts: {
+            mongoMatched: 0,
+            activeUsers: 0,
+            walletsPresent: 0,
+            walletsVerified: 0,
+            roleReads: 0,
+            roleMatches: 0,
+            returned: 0
+        }
+    };
+    const emitDiagnostics = (error) => {
+        if (typeof onDiagnostic !== "function") return;
+        const record = {
+            ...diagnostics,
+            stageCounts: { ...diagnostics.stageCounts },
+            ...(error ? { error: getPartnerDiagnosticLogFields(error) } : {})
+        };
+        try {
+            onDiagnostic(record);
+        } catch {
+            // Diagnostics must not change the partner lookup result.
+        }
+    };
 
-    const eligible = [];
-    for (const partner of partners) {
-        const user = partner.userId;
-        if (
-            user?.status !== "ACTIVE" ||
-            !user.walletAddress ||
-            !user.walletVerifiedAt
-        ) {
-            continue;
+    try {
+        const partnerChain = deps.blockchainV2 || deps.blockchain;
+        if (typeof partnerChain.assertSepolia !== "function") {
+            throw createPartnerDiagnosticError(
+                PARTNER_DIAGNOSTIC_STAGES.V2_CONFIGURATION,
+                "Sepolia ProductRegistry V2 preflight is unavailable"
+            );
         }
 
-        const partnerChain = deps.blockchainV2 || deps.blockchain;
-        const role = await (partnerChain.getRole || deps.blockchain.getRole)(user.walletAddress);
+        await withPartnerDiagnosticStage(
+            PARTNER_DIAGNOSTIC_STAGES.V2_CONFIGURATION,
+            () => partnerChain.assertSepolia()
+        );
+        diagnostics.rpcStatus = "SUCCESS";
+
+        const partners = await withPartnerDiagnosticStage(
+            PARTNER_DIAGNOSTIC_STAGES.MONGODB_PARTNER_QUERY,
+            () => deps.SupplyChainPartner.find({
+                partnerType: type,
+                verificationStatus: "VERIFIED"
+            }).populate("userId", "name status walletAddress walletVerifiedAt").sort({ companyName: 1 })
+        );
+        diagnostics.stageCounts.mongoMatched = partners.length;
+
+        const eligible = [];
         const roleConstants = partnerChain.ROLE || deps.blockchain.ROLE;
         const expectedRole = type === "DISTRIBUTOR"
             ? roleConstants.DISTRIBUTOR
             : roleConstants.RETAILER;
-        if (role === expectedRole) {
-            eligible.push({
-                id: String(partner._id),
-                companyName: partner.companyName,
-                walletAddress: ethers.getAddress(user.walletAddress)
-            });
-        }
-    }
 
-    return eligible;
+        for (const partner of partners) {
+            const user = partner.userId;
+            if (user?.status !== "ACTIVE") continue;
+            diagnostics.stageCounts.activeUsers++;
+            if (!user.walletAddress) continue;
+            diagnostics.stageCounts.walletsPresent++;
+            if (!user.walletVerifiedAt) continue;
+            diagnostics.stageCounts.walletsVerified++;
+
+            diagnostics.stageCounts.roleReads++;
+            let role;
+            try {
+                role = await withPartnerDiagnosticStage(
+                    PARTNER_DIAGNOSTIC_STAGES.CONTRACT_GET_ROLE,
+                    () => (partnerChain.getRole || deps.blockchain.getRole)(user.walletAddress)
+                );
+            } catch (error) {
+                diagnostics.rpcStatus = "FAILURE";
+                throw error;
+            }
+            if (role === expectedRole) {
+                diagnostics.stageCounts.roleMatches++;
+                eligible.push({
+                    id: String(partner._id),
+                    companyName: partner.companyName,
+                    walletAddress: ethers.getAddress(user.walletAddress)
+                });
+            }
+        }
+
+        diagnostics.stageCounts.returned = eligible.length;
+        emitDiagnostics();
+        return eligible;
+    } catch (error) {
+        if ([
+            PARTNER_DIAGNOSTIC_STAGES.V2_CONFIGURATION,
+            PARTNER_DIAGNOSTIC_STAGES.RPC_GET_NETWORK,
+            PARTNER_DIAGNOSTIC_STAGES.RPC_GET_CODE,
+            PARTNER_DIAGNOSTIC_STAGES.CONTRACT_GET_ROLE
+        ].includes(error?.partnerDiagnosticStage)) {
+            diagnostics.rpcStatus = "FAILURE";
+        }
+        try {
+            error.partnerLookupDiagnostics = {
+                ...diagnostics,
+                stageCounts: { ...diagnostics.stageCounts }
+            };
+        } catch {
+            // Preserve the original failure if it cannot carry diagnostic metadata.
+        }
+        emitDiagnostics(error);
+        throw error;
+    }
 };
 
 const addVerificationMetrics = async (products, VerificationModel) => {

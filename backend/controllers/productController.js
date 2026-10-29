@@ -791,15 +791,56 @@ const getMyProducts = async (req, res) => {
 };
 
 const getApprovedPartners = async (req, res) => {
+    const requestedType = String(req.query.type || "").toUpperCase();
+    const partnerType = ["DISTRIBUTOR", "RETAILER"].includes(requestedType)
+        ? requestedType
+        : "OTHER";
+    const emptyStageCounts = {
+        mongoMatched: 0,
+        activeUsers: 0,
+        walletsPresent: 0,
+        walletsVerified: 0,
+        roleReads: 0,
+        roleMatches: 0,
+        returned: 0
+    };
+    const safeStageCounts = (counts = {}) => Object.fromEntries(
+        Object.keys(emptyStageCounts).map((key) => [
+            key,
+            Number.isSafeInteger(counts[key]) && counts[key] >= 0 ? counts[key] : 0
+        ])
+    );
+    const logPartnerDiagnostic = (record) => {
+        const rpcStatus = ["SUCCESS", "FAILURE", "NOT_CHECKED"].includes(record.rpcStatus)
+            ? record.rpcStatus
+            : "NOT_CHECKED";
+        console.info("Partner lookup diagnostics:", JSON.stringify({
+            partnerType,
+            rpcStatus,
+            stageCounts: safeStageCounts(record.stageCounts)
+        }));
+    };
+
     try {
         const partners = await productRegistrationService.getApprovedPartners(
-            String(req.query.type || "").toUpperCase()
+            requestedType,
+            {},
+            (record) => {
+                if (!record.error) logPartnerDiagnostic(record);
+            }
         );
         return res.status(200).json({ partners });
     } catch (error) {
         console.error(
             "Get authorized partners failed:",
-            JSON.stringify(getPartnerDiagnosticLogFields(error))
+            JSON.stringify({
+                partnerType,
+                rpcStatus: ["SUCCESS", "FAILURE", "NOT_CHECKED"].includes(error.partnerLookupDiagnostics?.rpcStatus)
+                    ? error.partnerLookupDiagnostics.rpcStatus
+                    : "NOT_CHECKED",
+                stageCounts: safeStageCounts(error.partnerLookupDiagnostics?.stageCounts),
+                error: getPartnerDiagnosticLogFields(error)
+            })
         );
         return res.status(error.statusCode || 503).json({
             message: error.statusCode
