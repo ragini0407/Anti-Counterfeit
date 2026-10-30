@@ -39,9 +39,13 @@ def health(authorization: str | None = Header(default=None)):
         authorized = True
     except HTTPException:
         authorized = False
+    cnn_loaded = cnn_model is not None
+    scan_model_loaded = iso_forest is not None
     return {
-        "status": "ok" if iso_forest is not None and authorized else "degraded",
-        "scan_scoring_model_loaded": iso_forest is not None,
+        "status": "ok" if cnn_loaded and scan_model_loaded and authorized else "degraded",
+        "cnn_model_loaded": cnn_loaded,
+        "isolation_forest_model_loaded": scan_model_loaded,
+        "scan_scoring_model_loaded": scan_model_loaded,
         "authenticated_calls_enabled": authorized,
     }
 
@@ -54,7 +58,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 IMG_SIZE = (128, 128)
 
-CNN_MODEL_PATH = BASE_DIR / "models" / "saved_models" / "cnn_fake_detector.h5"
+CNN_MODEL_PATH = BASE_DIR / "models" / "saved_models" / "clean_cnn_fake_detector.keras"
 ISO_FOREST_PATH = BASE_DIR / "models" / "saved_models" / "isolation_forest.pkl"
 
 

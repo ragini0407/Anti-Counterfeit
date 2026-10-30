@@ -1,10 +1,14 @@
 import asyncio
+import io
 import json
 import os
 import unittest
 from pathlib import Path
 
 import joblib
+import numpy as np
+from fastapi import HTTPException, UploadFile
+from PIL import Image
 from pydantic import ValidationError
 
 from service import app as ai_app
@@ -133,23 +137,72 @@ class ScanScoringTests(unittest.TestCase):
             ("predict", [[3.0, 2.0, 24.0]]),
         ])
 
-    def test_health_reports_scan_model_readiness(self):
-        previous = ai_app.iso_forest
+    def test_health_reports_cnn_and_scan_model_readiness_separately(self):
+        previous_cnn = ai_app.cnn_model
+        previous_scan = ai_app.iso_forest
         try:
+            ai_app.cnn_model = None
+            ai_app.iso_forest = object()
+            self.assertEqual(ai_app.health(f"Bearer {TEST_AI_TOKEN}"), {
+                "status": "degraded",
+                "cnn_model_loaded": False,
+                "isolation_forest_model_loaded": True,
+                "scan_scoring_model_loaded": True,
+                "authenticated_calls_enabled": True,
+            })
+            ai_app.cnn_model = object()
             ai_app.iso_forest = None
             self.assertEqual(ai_app.health(f"Bearer {TEST_AI_TOKEN}"), {
                 "status": "degraded",
+                "cnn_model_loaded": True,
                 "scan_scoring_model_loaded": False,
+                "isolation_forest_model_loaded": False,
                 "authenticated_calls_enabled": True,
             })
             ai_app.iso_forest = object()
             self.assertEqual(ai_app.health(f"Bearer {TEST_AI_TOKEN}"), {
                 "status": "ok",
+                "cnn_model_loaded": True,
                 "scan_scoring_model_loaded": True,
+                "isolation_forest_model_loaded": True,
                 "authenticated_calls_enabled": True,
             })
         finally:
-            ai_app.iso_forest = previous
+            ai_app.cnn_model = previous_cnn
+            ai_app.iso_forest = previous_scan
+
+    def test_predict_contract_uses_multipart_file_and_returns_valid_classification(self):
+        operation = ai_app.app.openapi()["paths"]["/predict"]["post"]
+        content = operation["requestBody"]["content"]
+        self.assertIn("multipart/form-data", content)
+        request_schema = content["multipart/form-data"]["schema"]
+        if "$ref" in request_schema:
+            schema_name = request_schema["$ref"].rsplit("/", 1)[-1]
+            request_schema = ai_app.app.openapi()["components"]["schemas"][schema_name]
+        self.assertIn("file", request_schema["properties"])
+        self.assertIn("authorization", [parameter["name"] for parameter in operation["parameters"]])
+
+        class SpyCNN:
+            def predict(self, batch, verbose=0):
+                self.batch = batch
+                return np.array([[0.75]], dtype="float32")
+
+        previous_model = ai_app.cnn_model
+        model = SpyCNN()
+        ai_app.cnn_model = model
+        image_bytes = io.BytesIO()
+        Image.new("RGB", (4, 4), color="white").save(image_bytes, format="PNG")
+        image = UploadFile(filename="test.png", file=io.BytesIO(image_bytes.getvalue()))
+        try:
+            response = asyncio.run(ai_app.predict(image, f"Bearer {TEST_AI_TOKEN}"))
+            self.assertEqual(response, {"prediction": "genuine", "confidence": 0.75})
+            self.assertEqual(model.batch.shape, (1, 128, 128, 3))
+
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(ai_app.predict(image, "Bearer invalid-test-token"))
+            self.assertEqual(raised.exception.status_code, 401)
+        finally:
+            ai_app.cnn_model = previous_model
 
     def test_score_requires_configured_service_token(self):
         status, _ = asyncio.run(asgi_post("/score", {
