@@ -39,7 +39,8 @@ const verificationSchema = new mongoose.Schema(
                 "INVALID_PRODUCT_CODE",
                 "REGISTRY_UNAVAILABLE",
                 "REGISTRY_UNRESOLVED",
-                "AI_UNAVAILABLE"
+                "AI_UNAVAILABLE",
+                "IMAGE_MISMATCH"
             ],
             required: true
         },
