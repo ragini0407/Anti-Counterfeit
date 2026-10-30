@@ -1,7 +1,11 @@
 const multer = require("multer");
+const fs = require("fs");
 const path = require("path");
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const PRODUCT_UPLOAD_DIRECTORY = path.resolve(process.cwd(), "uploads", "products");
+fs.mkdirSync(PRODUCT_UPLOAD_DIRECTORY, { recursive: true });
+
 const IMAGE_TYPES = {
     "image/jpeg": [".jpg", ".jpeg"],
     "image/jpg": [".jpg", ".jpeg"],
@@ -40,7 +44,7 @@ const hasValidImageSignature = (buffer, mimetype) => {
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, "uploads/products/");
+        cb(null, PRODUCT_UPLOAD_DIRECTORY);
     },
 
     filename: (req, file, cb) => {
@@ -86,6 +90,7 @@ upload.singleImage = (fieldName) => (req, res, next) => {
 };
 
 upload.MAX_IMAGE_SIZE = MAX_IMAGE_SIZE;
+upload.PRODUCT_UPLOAD_DIRECTORY = PRODUCT_UPLOAD_DIRECTORY;
 upload.validateImageMetadata = validateImageMetadata;
 upload.hasValidImageSignature = hasValidImageSignature;
 
